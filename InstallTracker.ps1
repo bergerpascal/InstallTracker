@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.17"
+$scriptVersion = "1.0.18"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -417,11 +417,8 @@ function Update-Status {
     $statusBox.Text = $statusMsg
   }
   
-  # Auto-scroll to bottom with forced UI update
-  $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Render, {
-    $statusBox.ScrollToEnd()
-  })
-  
+  # Auto-scroll to bottom
+  $statusBox.ScrollToEnd()
   $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
 }
 
@@ -757,7 +754,6 @@ function Invoke-Snapshot {
       $report += @($fldDiff.Added | Sort-Object FullName | Select-Object FullName,CreationTime | Format-Table | Out-String)
 
       $lnkDiff = Compare-Json -base 'shortcuts' -keys @('FullName')
-      Update-Status "Shortcuts comparison: Added=$($lnkDiff.Added.Count), Removed=$($lnkDiff.Removed.Count)" -Append
       $report += "## New Shortcuts: $($lnkDiff.Added.Count)"
       $report += @($lnkDiff.Added | Sort-Object FullName | Select-Object FullName,CreationTime | Format-Table | Out-String)
 
