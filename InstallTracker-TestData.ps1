@@ -7,7 +7,79 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.0"
+$scriptVersion = "1.0.1"
+
+# --- Version Check and Update Logic ---
+$script:updateAvailable = $false
+$script:updateInfo = $null
+$CheckVersions = $true
+$GitHubRepository = "bergerpascal/InstallTracker"
+
+# If this is a restart after update, skip the update check
+$isUpdateRestart = $env:INSTALLTRACKER_TESTDATA_UPDATE_RESTART -eq "1"
+
+if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) {
+  $oldEA = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  
+  try {
+    $scriptPath = $MyInvocation.MyCommand.Path
+    if (-not $scriptPath) { $scriptPath = $PSCommandPath }
+    
+    # Simple version check - try to get latest version from GitHub
+    $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker-TestData.ps1"
+    
+    $latestVersion = $null
+    $content = $null
+    
+    try {
+      $webClient = New-Object System.Net.WebClient
+      $webClient.Timeout = 3000
+      $content = $webClient.DownloadString($uri)
+    } catch {
+      # Try with Invoke-WebRequest as fallback
+      try {
+        $response = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing
+        $content = $response.Content
+      } catch {
+        # Network error - skip version check
+      }
+    }
+    
+    # Extract version from downloaded content if successful
+    if ($content) {
+      # Try multiple regex patterns to extract version
+      if ($content -match '\$scriptVersion\s*=\s*"([0-9.]+)"') {
+        $latestVersion = $matches[1]
+      } elseif ($content -match 'scriptVersion\s*=\s*"([0-9.]+)"') {
+        $latestVersion = $matches[1]
+      }
+      
+      # Compare versions if extracted successfully
+      if ($latestVersion) {
+        try {
+          $currentVer = [version]$scriptVersion
+          $remoteVer = [version]$latestVersion
+          
+          if ($remoteVer -gt $currentVer) {
+            $script:updateAvailable = $true
+            $script:updateInfo = @{
+              LatestVersion = $latestVersion
+              DownloadUrl = $uri
+              ScriptPath = $scriptPath
+            }
+          }
+        } catch {
+          # Version comparison failed - skip
+        }
+      }
+    }
+  } catch {
+    # Silently ignore all errors
+  } finally {
+    $ErrorActionPreference = $oldEA
+  }
+}
 
 # Test data prefixes and markers
 $testMarker = "SystemDiffTest_"
@@ -878,4 +950,75 @@ $exitBtn.Add_Click({
 })
 
 Update-Status "Ready. Click CREATE TEST DATA to generate test data for InstallTracker testing."
+
+# Show update notification at startup if available
+if ($script:updateAvailable -eq $true -and $script:updateInfo) {
+  $oldEA = $ErrorActionPreference
+  $ErrorActionPreference = 'SilentlyContinue'
+  
+  try {
+    $result = [System.Windows.MessageBox]::Show(
+      "A new version is available!`n`nInstalled: v$scriptVersion`nAvailable: v$($script:updateInfo.LatestVersion)`n`nDo you want to download and install the update?",
+      "InstallTracker TestData Update",
+      [System.Windows.MessageBoxButton]::YesNo,
+      [System.Windows.MessageBoxImage]::Information
+    )
+    
+    if ($result -eq "Yes") {
+      try {
+        $tempDownloadPath = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.ps1'
+        $wc = New-Object System.Net.WebClient
+        $wc.DownloadFile($script:updateInfo.DownloadUrl, $tempDownloadPath)
+        
+        # Create backup of current version
+        $backupPath = $script:updateInfo.ScriptPath -replace '\.ps1$', '_backup.ps1'
+        Copy-Item -Path $script:updateInfo.ScriptPath -Destination $backupPath -Force
+        
+        # Wait for download to complete
+        Start-Sleep -Milliseconds 500
+        
+        # Delete the original file first to clear any file locks/caches
+        Remove-Item -Path $script:updateInfo.ScriptPath -Force
+        
+        # Wait a moment
+        Start-Sleep -Milliseconds 300
+        
+        # Copy the new version to the original location
+        Copy-Item -Path $tempDownloadPath -Destination $script:updateInfo.ScriptPath -Force
+        
+        # Clean up temp file
+        Remove-Item -Path $tempDownloadPath -Force
+        
+        [System.Windows.MessageBox]::Show(
+          "Update installed successfully!`n`nThe script will now restart.",
+          "Update Complete",
+          [System.Windows.MessageBoxButton]::OK,
+          [System.Windows.MessageBoxImage]::Information
+        ) | Out-Null
+        
+        # Wait to ensure everything is written to disk
+        Start-Sleep -Milliseconds 1000
+        
+        # Start the new script in a NEW process using Start-Process
+        $scriptPath = $script:updateInfo.ScriptPath
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath -WindowStyle Normal
+        
+        # Exit the old process completely
+        exit 0
+      } catch {
+        # Silently ignore download errors
+      }
+    }
+  } catch {
+    # Silently ignore all errors
+  }
+  
+  $ErrorActionPreference = $oldEA
+}
+
+# If this is an update restart, skip the GUI and exit - the new version will show it
+if ($isUpdateRestart) {
+  exit 0
+}
+
 $window.ShowDialog() | Out-Null

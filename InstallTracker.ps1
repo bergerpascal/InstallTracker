@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.15"
+$scriptVersion = "1.0.16"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -1492,7 +1492,6 @@ $configBtn.Add_Click({
     
     # Reset version check settings to defaults
     $script:checkVersionsCheckBox.IsChecked = $true
-    $script:gitHubRepoTextBox.Text = "bergerpascal/InstallTracker"
     
     $script:newPathTextBox.Clear()
     
