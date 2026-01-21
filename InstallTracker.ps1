@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.13"
+$scriptVersion = "1.0.15"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -21,23 +21,20 @@ $configFile = Join-Path $scriptDir "InstallTracker-Config.json"
 if (Test-Path $configFile) {
   try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
-    $RootPaths = $config.rootPaths | ForEach-Object {
-      # Expand environment variables in paths (e.g., %USERPROFILE% -> C:\Users\Username)
-      [System.Environment]::ExpandEnvironmentVariables($_)
-    }
+    $script:RootPaths = $config.rootPaths
     $ScanOptions = $config.scanOptions
     $CheckVersions = if ($null -ne $config.checkVersions) { $config.checkVersions } else { $true }
     $GitHubRepository = if ($config.gitHubRepository) { $config.gitHubRepository } else { "bergerpascal/InstallTracker" }
   } catch {
     # Fallback if JSON parsing fails
-    $RootPaths = @(
+    $script:RootPaths = @(
       "%USERPROFILE%",
       "%APPDATA%\Microsoft\Windows\Start Menu",
       "C:\Program Files",
       "C:\ProgramData",
       "C:\Users\Public\Desktop",
       "C:\Program Files (x86)"
-    ) | ForEach-Object { [System.Environment]::ExpandEnvironmentVariables($_) }
+    )
     $ScanOptions = @{
       services = $true
       runKeys = $true
@@ -50,14 +47,14 @@ if (Test-Path $configFile) {
   }
 } else {
   # Default values if InstallTracker-Config.json doesn't exist
-  $RootPaths = @(
+  $script:RootPaths = @(
     "%USERPROFILE%",
     "%APPDATA%\Microsoft\Windows\Start Menu",
     "C:\Program Files",
     "C:\ProgramData",
     "C:\Users\Public\Desktop",
     "C:\Program Files (x86)"
-  ) | ForEach-Object { [System.Environment]::ExpandEnvironmentVariables($_) }
+  )
   $ScanOptions = @{
     services = $true
     runKeys = $true
@@ -396,7 +393,12 @@ $xaml = @"
 
 [xml]$xmlReader = $xaml
 $reader = New-Object System.Xml.XmlNodeReader $xmlReader
-$window = [System.Windows.Markup.XamlReader]::Load($reader)
+try {
+  $window = [System.Windows.Markup.XamlReader]::Load($reader)
+} catch {
+  Write-Host "ERROR: Failed to load main window XAML: $_" -ForegroundColor Red
+  exit 1
+}
 
 $preBtn = $window.FindName("PreButton")
 $postBtn = $window.FindName("PostButton")
@@ -830,11 +832,12 @@ $configBtn.Add_Click({
   if (Test-Path $configFile) {
     try {
       $config = Get-Content $configFile -Raw | ConvertFrom-Json
-      $RootPaths = $config.rootPaths
+      $script:RootPaths = $config.rootPaths
     } catch {
       # Keep existing RootPaths if reload fails
     }
   }
+  # If no config exists, $script:RootPaths already has default values from initialization
   
   # Config window XAML
   # Config window XAML
@@ -1063,26 +1066,26 @@ $configBtn.Add_Click({
 
   [xml]$configXmlReader = $configXaml
   $configReader = New-Object System.Xml.XmlNodeReader $configXmlReader
-  $configWindow = [System.Windows.Markup.XamlReader]::Load($configReader)
+  $script:configWindow = [System.Windows.Markup.XamlReader]::Load($configReader)
   
-  $pathListBox = $configWindow.FindName("PathListBox")
-  $newPathTextBox = $configWindow.FindName("NewPathTextBox")
-  $addPathBtn = $configWindow.FindName("AddPathBtn")
-  $removePathBtn = $configWindow.FindName("RemovePathBtn")
-  $saveBtn = $configWindow.FindName("SaveBtn")
-  $cancelBtn = $configWindow.FindName("CancelBtn")
-  $resetBtn = $configWindow.FindName("ResetBtn")
+  $script:pathListBox = $script:configWindow.FindName("PathListBox")
+  $script:newPathTextBox = $script:configWindow.FindName("NewPathTextBox")
+  $script:addPathBtn = $script:configWindow.FindName("AddPathBtn")
+  $script:removePathBtn = $script:configWindow.FindName("RemovePathBtn")
+  $script:saveBtn = $script:configWindow.FindName("SaveBtn")
+  $script:cancelBtn = $script:configWindow.FindName("CancelBtn")
+  $script:resetBtn = $script:configWindow.FindName("ResetBtn")
   
-  $servicesCheckBox = $configWindow.FindName("ServicesCheckBox")
-  $tasksCheckBox = $configWindow.FindName("TasksCheckBox")
-  $runKeysCheckBox = $configWindow.FindName("RunKeysCheckBox")
-  $uninstallKeysCheckBox = $configWindow.FindName("UninstallKeysCheckBox")
-  $shortcutsCheckBox = $configWindow.FindName("ShortcutsCheckBox")
-  $runKeysInfoBtn = $configWindow.FindName("RunKeysInfoBtn")
-  $uninstallKeysInfoBtn = $configWindow.FindName("UninstallKeysInfoBtn")
+  $script:servicesCheckBox = $script:configWindow.FindName("ServicesCheckBox")
+  $script:tasksCheckBox = $script:configWindow.FindName("TasksCheckBox")
+  $script:runKeysCheckBox = $script:configWindow.FindName("RunKeysCheckBox")
+  $script:uninstallKeysCheckBox = $script:configWindow.FindName("UninstallKeysCheckBox")
+  $script:shortcutsCheckBox = $script:configWindow.FindName("ShortcutsCheckBox")
+  $script:runKeysInfoBtn = $script:configWindow.FindName("RunKeysInfoBtn")
+  $script:uninstallKeysInfoBtn = $script:configWindow.FindName("UninstallKeysInfoBtn")
   
   # Info button click handler
-  $runKeysInfoBtn.Add_Click({
+  $script:runKeysInfoBtn.Add_Click({
     # Create custom WPF window dynamically from $runKeyPaths array
     $stackPanel = New-Object System.Windows.Controls.StackPanel
     $stackPanel.Margin = New-Object System.Windows.Thickness(0)
@@ -1183,7 +1186,7 @@ $configBtn.Add_Click({
   })
   
   # Uninstall Keys info button click handler
-  $uninstallKeysInfoBtn.Add_Click({
+  $script:uninstallKeysInfoBtn.Add_Click({
     $stackPanel = New-Object System.Windows.Controls.StackPanel
     $stackPanel.Margin = New-Object System.Windows.Thickness(0)
     
@@ -1279,32 +1282,53 @@ $configBtn.Add_Click({
   })
   
   # Load current paths
-  $pathListBox.Items.Clear()
-  foreach ($path in $RootPaths) {
-    [void]$pathListBox.Items.Add($path)
+  $script:pathListBox.Items.Clear()
+  
+  # Use $script:RootPaths directly (should always be set from initialization)
+  # These are stored as environment variable strings (e.g., %USERPROFILE%)
+  $pathsToLoad = $script:RootPaths
+  
+  # If still empty or null, use hardcoded defaults
+  if ($null -eq $pathsToLoad -or $pathsToLoad.Count -eq 0) {
+    $pathsToLoad = @(
+      "%USERPROFILE%",
+      "%APPDATA%\Microsoft\Windows\Start Menu",
+      "C:\Program Files",
+      "C:\ProgramData",
+      "C:\Users\Public\Desktop",
+      "C:\Program Files (x86)"
+    )
+  }
+  
+  # Store the original (unangelöst) paths for saving later
+  $script:originalRootPaths = @($pathsToLoad)
+  
+  foreach ($path in $pathsToLoad) {
+    # Display paths as-is (with environment variables, not expanded)
+    $script:pathListBox.Items.Add($path) | Out-Null
   }
   
   # Load current scan options into checkboxes
-  $servicesCheckBox.IsChecked = $ScanOptions.services
-  $tasksCheckBox.IsChecked = $ScanOptions.scheduledTasks
-  $runKeysCheckBox.IsChecked = $ScanOptions.runKeys
-  $uninstallKeysCheckBox.IsChecked = $ScanOptions.uninstallKeys
-  $shortcutsCheckBox.IsChecked = $ScanOptions.startMenuShortcuts
+  $script:servicesCheckBox.IsChecked = $ScanOptions.services
+  $script:tasksCheckBox.IsChecked = $ScanOptions.scheduledTasks
+  $script:runKeysCheckBox.IsChecked = $ScanOptions.runKeys
+  $script:uninstallKeysCheckBox.IsChecked = $ScanOptions.uninstallKeys
+  $script:shortcutsCheckBox.IsChecked = $ScanOptions.startMenuShortcuts
   
   # Load version check options
-  $checkVersionsCheckBox = $configWindow.FindName("CheckVersionsCheckBox")
-  $checkVersionsCheckBox.IsChecked = $CheckVersions
+  $script:checkVersionsCheckBox = $script:configWindow.FindName("CheckVersionsCheckBox")
+  $script:checkVersionsCheckBox.IsChecked = $CheckVersions
   
   # Add path button
-  $addPathBtn.Add_Click({
-    $newPath = $newPathTextBox.Text.Trim()
+  $script:addPathBtn.Add_Click({
+    $newPath = $script:newPathTextBox.Text.Trim()
     
     if ([string]::IsNullOrWhiteSpace($newPath)) {
       [System.Windows.MessageBox]::Show("Please enter a path.", "Empty Path", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
       return
     }
     
-    if ($pathListBox.Items -contains $newPath) {
+    if ($script:pathListBox.Items -contains $newPath) {
       [System.Windows.MessageBox]::Show("This path already exists.", "Duplicate Path", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
       return
     }
@@ -1314,46 +1338,103 @@ $configBtn.Add_Click({
       if ($msgResult -ne 'Yes') { return }
     }
     
-    [void]$pathListBox.Items.Add($newPath)
-    $newPathTextBox.Clear()
+    [void]$script:pathListBox.Items.Add($newPath)
+    
+    # Try to convert to environment variable format for storage
+    $pathToStore = $newPath
+    if ($newPath -like "$env:USERPROFILE*") {
+      $pathToStore = $newPath -replace [regex]::Escape($env:USERPROFILE), "%USERPROFILE%"
+    } elseif ($newPath -like "$env:APPDATA*") {
+      $pathToStore = $newPath -replace [regex]::Escape($env:APPDATA), "%APPDATA%"
+    } elseif ($newPath -like "$env:ProgramFiles\*") {
+      $pathToStore = $newPath -replace [regex]::Escape($env:ProgramFiles), "C:\Program Files"
+    } elseif ($newPath -like "${env:ProgramFiles(x86)}\*") {
+      $pathToStore = $newPath -replace [regex]::Escape(${env:ProgramFiles(x86)}), "C:\Program Files (x86)"
+    }
+    
+    # Add to original paths array for saving
+    if ($null -eq $script:originalRootPaths) {
+      $script:originalRootPaths = @()
+    }
+    $script:originalRootPaths += $pathToStore
+    
+    $script:newPathTextBox.Clear()
   })
   
   # Remove path button
-  $removePathBtn.Add_Click({
-    if ($pathListBox.SelectedIndex -lt 0) {
+  $script:removePathBtn.Add_Click({
+    if ($script:pathListBox.SelectedIndex -lt 0) {
       [System.Windows.MessageBox]::Show("Please select a path to remove.", "No Selection", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
       return
     }
     
-    $selectedIndex = $pathListBox.SelectedIndex
-    $pathListBox.Items.RemoveAt($selectedIndex)
+    $selectedIndex = $script:pathListBox.SelectedIndex
+    $script:pathListBox.Items.RemoveAt($selectedIndex)
+    
+    # Also remove from original paths array
+    if ($null -ne $script:originalRootPaths -and $selectedIndex -lt $script:originalRootPaths.Count) {
+      $script:originalRootPaths = $script:originalRootPaths | Select-Object -Index (0..($script:originalRootPaths.Count-1) | Where-Object { $_ -ne $selectedIndex })
+    }
   })
   
   # Save button
-  $saveBtn.Add_Click({
-    if ($pathListBox.Items.Count -eq 0) {
+  $script:saveBtn.Add_Click({
+    if ($script:pathListBox.Items.Count -eq 0) {
       [System.Windows.MessageBox]::Show("You must have at least one path.", "Empty Paths", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
       return
     }
     
     # Create config object and save
+    # Convert absolute paths back to environment variable format for portability
     $newRootPaths = @()
-    foreach ($item in $pathListBox.Items) {
-      $newRootPaths += $item
+    foreach ($item in $script:pathListBox.Items) {
+      # Find the corresponding original (unangelöst) path
+      $displayPath = $item
+      
+      # Try to match with original paths
+      $matchedPath = $null
+      for ($i = 0; $i -lt $script:originalRootPaths.Count; $i++) {
+        $originalPath = $script:originalRootPaths[$i]
+        $expandedOriginal = [System.Environment]::ExpandEnvironmentVariables($originalPath)
+        if ($expandedOriginal -eq $displayPath) {
+          $matchedPath = $originalPath
+          break
+        }
+      }
+      
+      # If matched, use original path; otherwise try to convert
+      if ($null -ne $matchedPath) {
+        $newRootPaths += $matchedPath
+      } else {
+        # Fallback: try to convert absolute path back to environment variables
+        $pathToSave = $displayPath
+        
+        if ($displayPath -like "$env:USERPROFILE*") {
+          $pathToSave = $displayPath -replace [regex]::Escape($env:USERPROFILE), "%USERPROFILE%"
+        } elseif ($displayPath -like "$env:APPDATA*") {
+          $pathToSave = $displayPath -replace [regex]::Escape($env:APPDATA), "%APPDATA%"
+        } elseif ($displayPath -like "$env:ProgramFiles\*") {
+          $pathToSave = $displayPath -replace [regex]::Escape($env:ProgramFiles), "C:\Program Files"
+        } elseif ($displayPath -like "${env:ProgramFiles(x86)}\*") {
+          $pathToSave = $displayPath -replace [regex]::Escape(${env:ProgramFiles(x86)}), "C:\Program Files (x86)"
+        }
+        
+        $newRootPaths += $pathToSave
+      }
     }
     
     $newScanOptions = @{
-      services = $servicesCheckBox.IsChecked
-      scheduledTasks = $tasksCheckBox.IsChecked
-      runKeys = $runKeysCheckBox.IsChecked
-      uninstallKeys = $uninstallKeysCheckBox.IsChecked
-      startMenuShortcuts = $shortcutsCheckBox.IsChecked
+      services = $script:servicesCheckBox.IsChecked
+      scheduledTasks = $script:tasksCheckBox.IsChecked
+      runKeys = $script:runKeysCheckBox.IsChecked
+      uninstallKeys = $script:uninstallKeysCheckBox.IsChecked
+      startMenuShortcuts = $script:shortcutsCheckBox.IsChecked
     }
     
     $configObject = @{
       rootPaths = $newRootPaths
       scanOptions = $newScanOptions
-      checkVersions = $checkVersionsCheckBox.IsChecked
+      checkVersions = $script:checkVersionsCheckBox.IsChecked
       gitHubRepository = "bergerpascal/InstallTracker"
       description = "Folders to scan for changes in InstallTracker (managed via GUI)"
     }
@@ -1365,7 +1446,7 @@ $configBtn.Add_Click({
       # Update global variables with newly saved settings
       $script:RootPaths = $newRootPaths
       $script:ScanOptions = $newScanOptions
-      $script:CheckVersions = $checkVersionsCheckBox.IsChecked
+      $script:CheckVersions = $script:checkVersionsCheckBox.IsChecked
       
       $configWindow.Close()
     } catch {
@@ -1374,17 +1455,17 @@ $configBtn.Add_Click({
   })
   
   # Cancel button
-  $cancelBtn.Add_Click({
-    $configWindow.Close()
+  $script:cancelBtn.Add_Click({
+    $script:configWindow.Close()
   })
   
   # Reset to defaults button
-  $resetBtn.Add_Click({
+  $script:resetBtn.Add_Click({
     $msgResult = [System.Windows.MessageBox]::Show("Reset all settings to defaults?`n`nThis cannot be undone.", "Reset to Defaults", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
     if ($msgResult -ne 'Yes') { return }
     
     # Clear path list and add default paths from Fallback
-    $pathListBox.Items.Clear()
+    $script:pathListBox.Items.Clear()
     $defaultPaths = @(
       "%USERPROFILE%",
       "%APPDATA%\Microsoft\Windows\Start Menu",
@@ -1393,28 +1474,33 @@ $configBtn.Add_Click({
       "C:\Users\Public\Desktop",
       "C:\Program Files (x86)"
     )
+    
+    # Store originals for later saving
+    $script:originalRootPaths = @($defaultPaths)
+    
     foreach ($defaultPath in $defaultPaths) {
-      [void]$pathListBox.Items.Add($defaultPath)
+      # Display paths as-is (with environment variables, not expanded)
+      [void]$script:pathListBox.Items.Add($defaultPath)
     }
     
     # Reset checkboxes to defaults (all enabled except not defined)
-    $servicesCheckBox.IsChecked = $true
-    $tasksCheckBox.IsChecked = $true
-    $runKeysCheckBox.IsChecked = $true
-    $uninstallKeysCheckBox.IsChecked = $true
-    $shortcutsCheckBox.IsChecked = $true
+    $script:servicesCheckBox.IsChecked = $true
+    $script:tasksCheckBox.IsChecked = $true
+    $script:runKeysCheckBox.IsChecked = $true
+    $script:uninstallKeysCheckBox.IsChecked = $true
+    $script:shortcutsCheckBox.IsChecked = $true
     
     # Reset version check settings to defaults
-    $checkVersionsCheckBox.IsChecked = $true
-    $gitHubRepoTextBox.Text = "bergerpascal/InstallTracker"
+    $script:checkVersionsCheckBox.IsChecked = $true
+    $script:gitHubRepoTextBox.Text = "bergerpascal/InstallTracker"
     
-    $newPathTextBox.Clear()
+    $script:newPathTextBox.Clear()
     
     [System.Windows.MessageBox]::Show("Settings reset to defaults.", "Reset Complete", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
   })
   
-  $configWindow.Owner = $window
-  $configWindow.Show() | Out-Null
+  $script:configWindow.Owner = $window
+  $script:configWindow.Show() | Out-Null
   
   $preBtn.IsEnabled = $true
   $postBtn.IsEnabled = $true
@@ -1507,6 +1593,16 @@ if ($isUpdateRestart) {
 }
 
 # Display the GUI window
-$window.Activate() | Out-Null
-$window.Topmost = $true
-$window.ShowDialog() | Out-Null
+if ($null -eq $window) {
+  Write-Host "ERROR: `$window is null! Cannot display GUI. Check XAML parsing errors above." -ForegroundColor Red
+  exit 1
+}
+
+try {
+  $window.Activate() | Out-Null
+  $window.Topmost = $true
+  $window.ShowDialog() | Out-Null
+} catch {
+  Write-Host "ERROR displaying window: $_" -ForegroundColor Red
+  exit 1
+}
