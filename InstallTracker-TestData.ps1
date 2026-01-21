@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.8"
+$scriptVersion = "1.0.9"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -283,6 +283,7 @@ $createBtn = $window.FindName("CreateButton")
 $deleteBtn = $window.FindName("DeleteButton")
 $exitBtn = $window.FindName("ExitButton")
 $statusBox = $window.FindName("StatusBox")
+$statusScrollViewer = $window.FindName("StatusScrollViewer")
 
 function Update-Status {
   param([string]$Message, [switch]$Append)
@@ -297,7 +298,11 @@ function Update-Status {
   }
   
   # Auto-scroll to bottom
-  $statusBox.ScrollToEnd()
+  if ($statusScrollViewer) {
+    $statusScrollViewer.ScrollToEnd()
+  } else {
+    $statusBox.ScrollToEnd()
+  }
   $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
 }
 
