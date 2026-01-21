@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.2"
+$scriptVersion = "1.0.3"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false

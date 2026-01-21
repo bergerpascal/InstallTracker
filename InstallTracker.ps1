@@ -380,7 +380,7 @@ $xaml = @"
                 
                 <!-- Status Box -->
                 <TextBox Name="StatusBox" Grid.Row="1" IsReadOnly="True" 
-                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                          Text="Ready. Select a mode to begin." Foreground="#374151" 
                          FontFamily="Consolas" FontSize="10" 
                          Margin="0" TextWrapping="Wrap" Background="White" 
@@ -418,8 +418,10 @@ function Update-Status {
     $statusBox.Text = $statusMsg
   }
   
-  # Auto-scroll to bottom
-  $statusBox.ScrollToEnd()
+  # Auto-scroll to bottom with forced UI update
+  $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Render, {
+    $statusBox.ScrollToEnd()
+  })
   
   $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
 }
