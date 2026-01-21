@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.7"
+$scriptVersion = "1.0.8"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -152,9 +152,9 @@ $xaml = @"
                     <TextBlock Text="Test Data Management" FontSize="14" FontWeight="Bold" Foreground="#1F2937"/>
                     <TextBlock Text="Generate or remove test data across all monitored system components" 
                                FontSize="10" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,0,0,15"/>
-                        
-                        <!-- Buttons Grid -->
-                        <Grid Margin="0,0,0,0">
+                    
+                    <!-- Buttons Grid -->
+                    <Grid Margin="0,0,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="10"/>
@@ -246,31 +246,30 @@ $xaml = @"
                         </Grid>
                     </StackPanel>
                 </Border>
+            
+            <!-- Status Box -->
+            <Border Grid.Row="2" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="0" Margin="0,0,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="150"/>
+                </Grid.RowDefinitions>
                 
-                <!-- Status Box -->
-                <Border Grid.Row="2" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="0" Margin="0,0,0,0">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*" MinHeight="150"/>
-                        </Grid.RowDefinitions>
-                        
-                        <TextBlock Grid.Row="0" Text="Activity Log" FontSize="12" FontWeight="Bold" Foreground="#1F2937" 
-                                   Padding="15,15,15,10"/>
-                        
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" 
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      x:Name="StatusScrollViewer">
-                            <TextBox Name="StatusBox" 
-                                     IsReadOnly="True" 
-                                     Text="Ready. Click CREATE TEST DATA to generate test data."
-                                     Foreground="#374151" FontFamily="Consolas" 
-                                     FontSize="10" Padding="15,0,15,15" TextWrapping="Wrap" 
-                                     Background="White" BorderThickness="0" AcceptsReturn="True"/>
-                        </ScrollViewer>
-                    </Grid>
-                </Border>
+                <TextBlock Grid.Row="0" Text="Activity Log" FontSize="12" FontWeight="Bold" Foreground="#1F2937" 
+                           Padding="15,15,15,10"/>
+                
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" 
+                              HorizontalScrollBarVisibility="Disabled"
+                              x:Name="StatusScrollViewer">
+                    <TextBox Name="StatusBox" 
+                             IsReadOnly="True" 
+                             Text="Ready. Click CREATE TEST DATA to generate test data."
+                             Foreground="#374151" FontFamily="Consolas" 
+                             FontSize="10" Padding="15,0,15,15" TextWrapping="Wrap" 
+                             Background="White" BorderThickness="0" AcceptsReturn="True"/>
+                </ScrollViewer>
             </Grid>
+        </Border>
         </Grid>
     </Grid>
 </Window>
