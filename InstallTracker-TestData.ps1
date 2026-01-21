@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.5"
+$scriptVersion = "1.0.6"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -294,10 +294,9 @@ function Update-Status {
     $statusBox.Text = $statusMsg
   }
   
-  # Force UI refresh and scroll to bottom
-  $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, {
-    $statusBox.ScrollToEnd()
-  })
+  # Auto-scroll to bottom
+  $statusBox.ScrollToEnd()
+  $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
 }
 
 function New-TestFolders {
