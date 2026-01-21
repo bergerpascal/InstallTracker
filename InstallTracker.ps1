@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.16"
+$scriptVersion = "1.0.17"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -182,8 +182,7 @@ $xaml = @"
         Height="650" Width="750"
         Background="#F8F9FA"
         FontFamily="Segoe UI"
-        FontSize="12"
-        Topmost="True">
+        FontSize="12">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -1601,7 +1600,7 @@ if ($null -eq $window) {
 
 try {
   $window.Activate() | Out-Null
-  $window.Topmost = $true
+  $window.BringIntoView() | Out-Null
   $window.ShowDialog() | Out-Null
 } catch {
   Write-Host "ERROR displaying window: $_" -ForegroundColor Red
