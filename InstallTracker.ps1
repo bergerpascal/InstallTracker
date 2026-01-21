@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.11"
+$scriptVersion = "1.0.12"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -87,31 +87,39 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     # Simple version check - try to get latest version from GitHub
     $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker.ps1"
     
+    $latestVersion = $null
+    $content = $null
+    
     try {
       $webClient = New-Object System.Net.WebClient
       $webClient.Timeout = 3000
       $content = $webClient.DownloadString($uri)
-      
-      if ($content -match '\$scriptVersion\s*=\s*"([^"]+)"') {
-        $latestVersion = $matches[1]
-        if ([version]$latestVersion -gt [version]$scriptVersion) {
-          $script:updateAvailable = $true
-          $script:updateInfo = @{
-            LatestVersion = $latestVersion
-            DownloadUrl = $uri
-            ScriptPath = $scriptPath
-          }
-        }
-      }
     } catch {
       # Try with Invoke-WebRequest as fallback
       try {
         $response = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing
         $content = $response.Content
-        
-        if ($content -match '\$scriptVersion\s*=\s*"([^"]+)"') {
-          $latestVersion = $matches[1]
-          if ([version]$latestVersion -gt [version]$scriptVersion) {
+      } catch {
+        # Network error - skip version check
+      }
+    }
+    
+    # Extract version from downloaded content if successful
+    if ($content) {
+      # Try multiple regex patterns to extract version
+      if ($content -match '\$scriptVersion\s*=\s*"([0-9.]+)"') {
+        $latestVersion = $matches[1]
+      } elseif ($content -match 'scriptVersion\s*=\s*"([0-9.]+)"') {
+        $latestVersion = $matches[1]
+      }
+      
+      # Compare versions if extracted successfully
+      if ($latestVersion) {
+        try {
+          $currentVer = [version]$scriptVersion
+          $remoteVer = [version]$latestVersion
+          
+          if ($remoteVer -gt $currentVer) {
             $script:updateAvailable = $true
             $script:updateInfo = @{
               LatestVersion = $latestVersion
@@ -119,9 +127,9 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
               ScriptPath = $scriptPath
             }
           }
+        } catch {
+          # Version comparison failed - skip
         }
-      } catch {
-        # Silently ignore
       }
     }
   } catch {
