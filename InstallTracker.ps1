@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.18"
+$scriptVersion = "1.0.19"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -82,7 +82,9 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     if (-not $scriptPath) { $scriptPath = $PSCommandPath }
     
     # Simple version check - try to get latest version from GitHub
-    $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker.ps1"
+    # Add timestamp to avoid CDN caching
+    $cacheParam = [int64](Get-Date -UFormat %s)
+    $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker.ps1?t=$cacheParam"
     
     $latestVersion = $null
     $content = $null

@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.9"
+$scriptVersion = "1.0.10"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -27,7 +27,9 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     if (-not $scriptPath) { $scriptPath = $PSCommandPath }
     
     # Simple version check - try to get latest version from GitHub
-    $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker-TestData.ps1"
+    # Add timestamp to avoid CDN caching
+    $cacheParam = [int64](Get-Date -UFormat %s)
+    $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker-TestData.ps1?t=$cacheParam"
     
     $latestVersion = $null
     $content = $null
