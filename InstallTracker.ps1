@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.9"
+$scriptVersion = "1.0.10"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -83,7 +83,7 @@ function Test-GitHubVersionCheck {
   }
   
   try {
-    $rawUri = "https://raw.githubusercontent.com/$Repository/main/InstallTracker.ps1"
+    $rawUri = "https://raw.githubusercontent.com/$Repository/refs/heads/main/InstallTracker.ps1"
     
     $webClient = New-Object System.Net.WebClient
     $webClient.Timeout = 15000  # 15 seconds timeout
