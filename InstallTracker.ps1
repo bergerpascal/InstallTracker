@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.4"
+$scriptVersion = "1.0.5"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -74,7 +74,8 @@ if (Test-Path $configFile) {
 function Test-GitHubVersionCheck {
   param(
     [string]$Repository,
-    [string]$CurrentVersion
+    [string]$CurrentVersion,
+    [string]$ScriptPath
   )
   
   if ([string]::IsNullOrWhiteSpace($Repository)) {
@@ -82,25 +83,28 @@ function Test-GitHubVersionCheck {
   }
   
   try {
-    $uri = "https://api.github.com/repos/$Repository/releases/latest"
-    $response = Invoke-WebRequest -Uri $uri -UseBasicParsing -ErrorAction Stop
-    $releaseInfo = $response.Content | ConvertFrom-Json
+    # Get raw InstallTracker.ps1 file from GitHub
+    $rawUri = "https://raw.githubusercontent.com/$Repository/main/InstallTracker.ps1"
+    $response = Invoke-WebRequest -Uri $rawUri -UseBasicParsing -ErrorAction Stop
+    $fileContent = $response.Content
     
-    if ($releaseInfo.tag_name) {
-      $latestVersion = $releaseInfo.tag_name -replace '^v', ''
+    # Extract version from file using regex
+    if ($fileContent -match '\$scriptVersion\s*=\s*"([^"]+)"') {
+      $latestVersion = $matches[1]
       
       # Compare versions
       if ([version]$latestVersion -gt [version]$CurrentVersion) {
         return @{
           LatestVersion = $latestVersion
-          DownloadUrl = $releaseInfo.html_url
-          ReleaseNotes = $releaseInfo.body
+          DownloadUrl = $rawUri
+          FileContent = $fileContent
+          RepoUrl = "https://github.com/$Repository"
         }
       }
     }
   } catch {
-    # Silently fail if update check doesn't work
-    Write-Verbose "Update check failed: $_"
+    # Silently fail if version check doesn't work
+    Write-Verbose "Version check failed: $_"
   }
   
   return $null
@@ -144,7 +148,8 @@ Add-Type -AssemblyName PresentationCore
 # Function to show version check notification
 function Show-VersionCheckDialog {
   param(
-    [hashtable]$UpdateInfo
+    [hashtable]$UpdateInfo,
+    [string]$ScriptPath
   )
   
   Add-Type -AssemblyName System.Windows.Forms
@@ -152,7 +157,7 @@ function Show-VersionCheckDialog {
   
   $form = New-Object System.Windows.Forms.Form
   $form.Text = "InstallTracker Version Check"
-  $form.Size = New-Object System.Drawing.Size(500, 300)
+  $form.Size = New-Object System.Drawing.Size(500, 280)
   $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
   $form.TopMost = $true
   $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -174,44 +179,39 @@ function Show-VersionCheckDialog {
   $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
   $form.Controls.Add($infoLabel)
   
-  # Release notes
-  $notesLabel = New-Object System.Windows.Forms.Label
-  $notesLabel.Text = "Release Notes:"
-  $notesLabel.Location = New-Object System.Drawing.Point(20, 120)
-  $notesLabel.Size = New-Object System.Drawing.Size(450, 20)
-  $notesLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-  $form.Controls.Add($notesLabel)
+  $dialogResult = [System.Windows.Forms.DialogResult]::No
   
-  # Release notes text box (readonly)
-  $notesBox = New-Object System.Windows.Forms.TextBox
-  $notesBox.Text = $UpdateInfo.ReleaseNotes
-  $notesBox.ReadOnly = $true
-  $notesBox.Multiline = $true
-  $notesBox.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
-  $notesBox.Location = New-Object System.Drawing.Point(20, 145)
-  $notesBox.Size = New-Object System.Drawing.Size(450, 80)
-  $notesBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-  $form.Controls.Add($notesBox)
-  
-  # Buttons
+  # Download and Update button
   $yesButton = New-Object System.Windows.Forms.Button
-  $yesButton.Text = "Go to Release"
-  $yesButton.Location = New-Object System.Drawing.Point(240, 240)
-  $yesButton.Size = New-Object System.Drawing.Size(110, 30)
+  $yesButton.Text = "Download & Update"
+  $yesButton.Location = New-Object System.Drawing.Point(180, 220)
+  $yesButton.Size = New-Object System.Drawing.Size(140, 30)
   $yesButton.BackColor = [System.Drawing.Color]::FromArgb(255, 59, 130, 246)
   $yesButton.ForeColor = [System.Drawing.Color]::White
   $yesButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-  $yesButton.DialogResult = [System.Windows.Forms.DialogResult]::Yes
   $form.Controls.Add($yesButton)
   
+  # Later button
   $noButton = New-Object System.Windows.Forms.Button
   $noButton.Text = "Later"
-  $noButton.Location = New-Object System.Drawing.Point(360, 240)
+  $noButton.Location = New-Object System.Drawing.Point(330, 220)
   $noButton.Size = New-Object System.Drawing.Size(110, 30)
   $noButton.BackColor = [System.Drawing.Color]::FromArgb(255, 209, 213, 219)
   $noButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-  $noButton.DialogResult = [System.Windows.Forms.DialogResult]::No
   $form.Controls.Add($noButton)
+  
+  # Button event handlers
+  $yesButton.Add_Click({
+    $dialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $form.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $form.Close()
+  })
+  
+  $noButton.Add_Click({
+    $dialogResult = [System.Windows.Forms.DialogResult]::No
+    $form.DialogResult = [System.Windows.Forms.DialogResult]::No
+    $form.Close()
+  })
   
   $form.AcceptButton = $yesButton
   $form.CancelButton = $noButton
@@ -219,7 +219,40 @@ function Show-VersionCheckDialog {
   $result = $form.ShowDialog()
   $form.Dispose()
   
-  return $result -eq [System.Windows.Forms.DialogResult]::Yes
+  if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+    # Download new script
+    try {
+      $tempPath = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.ps1'
+      Write-Host "Downloading new version to: $tempPath"
+      
+      $webClient = New-Object System.Net.WebClient
+      $webClient.DownloadFile($UpdateInfo.DownloadUrl, $tempPath)
+      
+      # Backup old script
+      $backupPath = $ScriptPath -replace '\.ps1$', '_backup.ps1'
+      Copy-Item -Path $ScriptPath -Destination $backupPath -Force
+      
+      # Replace old script with new one
+      Copy-Item -Path $tempPath -Destination $ScriptPath -Force
+      Remove-Item -Path $tempPath -Force
+      
+      # Restart script with new version
+      Write-Host "Script updated successfully. Restarting with new version..."
+      Start-Sleep -Seconds 1
+      
+      & $ScriptPath
+      exit
+    } catch {
+      [System.Windows.Forms.MessageBox]::Show(
+        "Error downloading update: $($_.Exception.Message)",
+        "Download Error",
+        [System.Windows.MessageBoxButtons]::OK,
+        [System.Windows.MessageBoxIcon]::Error
+      ) | Out-Null
+    }
+  }
+  
+  return $false
 }
 
 $xaml = @"
@@ -1487,20 +1520,16 @@ if ($CheckVersions -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
     $window.UpdateLayout()
   }, "Normal")
   
-  $versionInfo = Test-GitHubVersionCheck -Repository $GitHubRepository -CurrentVersion $scriptVersion
+  $scriptPath = $MyInvocation.MyCommand.Path
+  if (-not $scriptPath) { $scriptPath = $PSCommandPath }
+  
+  $versionInfo = Test-GitHubVersionCheck -Repository $GitHubRepository -CurrentVersion $scriptVersion -ScriptPath $scriptPath
   
   if ($versionInfo) {
     $statusBox.Text = $initialStatus
     
     # Show version check dialog
-    if (Show-VersionCheckDialog -UpdateInfo $versionInfo) {
-      try {
-        # Open the release page in default browser
-        Start-Process $updateInfo.DownloadUrl
-      } catch {
-        Write-Host "Could not open browser: $_"
-      }
-    }
+    Show-VersionCheckDialog -UpdateInfo $versionInfo -ScriptPath $scriptPath
   } else {
     $statusBox.Text = $initialStatus
   }
