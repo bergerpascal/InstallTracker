@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.5"
+$scriptVersion = "1.0.6"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -1526,12 +1526,16 @@ if ($CheckVersions -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
   $versionInfo = Test-GitHubVersionCheck -Repository $GitHubRepository -CurrentVersion $scriptVersion -ScriptPath $scriptPath
   
   if ($versionInfo) {
-    $statusBox.Text = $initialStatus
+    Update-Status "New version available: v$($versionInfo.LatestVersion) (Current: v$scriptVersion)"
     
     # Show version check dialog
     Show-VersionCheckDialog -UpdateInfo $versionInfo -ScriptPath $scriptPath
   } else {
-    $statusBox.Text = $initialStatus
+    Update-Status "Version check completed. Running latest version (v$scriptVersion)" -Append
+  }
+} else {
+  if (-not $CheckVersions) {
+    Update-Status "Version check disabled in settings" -Append
   }
 }
 
