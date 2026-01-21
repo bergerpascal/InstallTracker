@@ -1,13 +1,13 @@
 #
 # InstallTracker Test Data Generator
 # Creates and removes test data for all monitored system components
-# Version: 1.0.0
+# 
 #
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.1"
+$scriptVersion = "1.0.2"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -96,6 +96,7 @@ $testAllUserDesktop = Join-Path "C:\Users\Public" "Desktop\${testMarker}AllUserD
 $testProgramFiles = Join-Path "C:\Program Files" "${testMarker}TestApp"
 $testProgramFilesX86 = Join-Path "C:\Program Files (x86)" "${testMarker}TestApp"
 $testStartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\${testMarker}StartMenu"
+$testLocalAppData = Join-Path $env:LOCALAPPDATA "${testMarker}AppData"
 
 # --- GUI Definition ---
 $xaml = @"
@@ -399,6 +400,27 @@ function New-TestStartMenuShortcuts {
   }
   catch {
     Update-Status "[ERROR] Shortcut error: $($_.Exception.Message)" -Append
+    return $false
+  }
+}
+
+function New-TestLocalAppDataFiles {
+  param()
+  try {
+    Update-Status "Creating test files in LocalAppData..." -Append
+    New-Item -ItemType Directory -Path $testLocalAppData -Force -ErrorAction SilentlyContinue | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $testLocalAppData "Cache") -Force -ErrorAction SilentlyContinue | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $testLocalAppData "Data") -Force -ErrorAction SilentlyContinue | Out-Null
+    
+    Set-Content -Path (Join-Path $testLocalAppData "AppConfig.ini") -Value "[Settings]`nTestValue=Enabled" -Encoding UTF8 -ErrorAction SilentlyContinue
+    Set-Content -Path (Join-Path $testLocalAppData "Cache\CacheFile.tmp") -Value "Temporary cache data" -Encoding UTF8 -ErrorAction SilentlyContinue
+    Set-Content -Path (Join-Path $testLocalAppData "Data\UserData.json") -Value '{"test":"data","version":"1.0"}' -Encoding UTF8 -ErrorAction SilentlyContinue
+    
+    Update-Status "[OK] LocalAppData test files created at: $testLocalAppData" -Append
+    return $true
+  }
+  catch {
+    Update-Status "[ERROR] LocalAppData error: $($_.Exception.Message)" -Append
     return $false
   }
 }
@@ -778,6 +800,24 @@ function Remove-TestDesktopFiles {
   }
 }
 
+function Remove-TestLocalAppDataFiles {
+  param()
+  try {
+    Update-Status "Removing LocalAppData test files..." -Append
+    if (Test-Path $testLocalAppData) {
+      Remove-Item -Path $testLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
+      Update-Status "[OK] LocalAppData test files removed" -Append
+    } else {
+      Update-Status "[INFO] LocalAppData test files not found" -Append
+    }
+    return $true
+  }
+  catch {
+    Update-Status "[ERROR] LocalAppData removal error: $($_.Exception.Message)" -Append
+    return $false
+  }
+}
+
 function Remove-TestProgramFilesData {
   param()
   try {
@@ -876,6 +916,8 @@ $createBtn.Add_Click({
   Update-Status "" -Append
   New-TestStartMenuShortcuts
   Update-Status "" -Append
+  New-TestLocalAppDataFiles
+  Update-Status "" -Append
   New-TestRegistryEntries
   Update-Status "" -Append
   New-TestUninstallEntries
@@ -929,6 +971,8 @@ $deleteBtn.Add_Click({
     Remove-TestDesktopFiles
     Update-Status "" -Append
     Remove-TestProgramFilesData
+    Update-Status "" -Append
+    Remove-TestLocalAppDataFiles
     Update-Status "" -Append
     Remove-TestStartMenuShortcuts
     Update-Status "" -Append
