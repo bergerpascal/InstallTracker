@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.3"
+$scriptVersion = "1.0.4"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -245,16 +245,26 @@ $xaml = @"
                 
                 <!-- Status Box -->
                 <Border Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="0" Margin="0,0,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Activity Log" FontSize="12" FontWeight="Bold" Foreground="#1F2937" 
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*" MinHeight="150"/>
+                        </Grid.RowDefinitions>
+                        
+                        <TextBlock Grid.Row="0" Text="Activity Log" FontSize="12" FontWeight="Bold" Foreground="#1F2937" 
                                    Padding="15,15,15,10"/>
-                        <TextBox Name="StatusBox" 
-                                 IsReadOnly="True" VerticalScrollBarVisibility="Auto" 
-                                 Text="Ready. Click CREATE TEST DATA to generate test data."
-                                 Foreground="#374151" FontFamily="Consolas" 
-                                 FontSize="10" Padding="15,0,15,15" TextWrapping="Wrap" 
-                                 Background="White" BorderThickness="0" MinHeight="300"/>
-                    </StackPanel>
+                        
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" 
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      x:Name="StatusScrollViewer">
+                            <TextBox Name="StatusBox" 
+                                     IsReadOnly="True" 
+                                     Text="Ready. Click CREATE TEST DATA to generate test data."
+                                     Foreground="#374151" FontFamily="Consolas" 
+                                     FontSize="10" Padding="15,0,15,15" TextWrapping="Wrap" 
+                                     Background="White" BorderThickness="0" AcceptsReturn="True"/>
+                        </ScrollViewer>
+                    </Grid>
                 </Border>
                 
             </StackPanel>
@@ -284,8 +294,10 @@ function Update-Status {
     $statusBox.Text = $statusMsg
   }
   
-  $statusBox.ScrollToEnd()
-  $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+  # Force UI refresh and scroll to bottom
+  $window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, {
+    $statusBox.ScrollToEnd()
+  })
 }
 
 function New-TestFolders {
