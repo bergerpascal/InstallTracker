@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.6"
+$scriptVersion = "1.0.7"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -92,6 +92,8 @@ function Test-GitHubVersionCheck {
     if ($fileContent -match '\$scriptVersion\s*=\s*"([^"]+)"') {
       $latestVersion = $matches[1]
       
+      Write-Verbose "Found version on GitHub: $latestVersion, Current: $CurrentVersion"
+      
       # Compare versions
       if ([version]$latestVersion -gt [version]$CurrentVersion) {
         return @{
@@ -99,15 +101,29 @@ function Test-GitHubVersionCheck {
           DownloadUrl = $rawUri
           FileContent = $fileContent
           RepoUrl = "https://github.com/$Repository"
+          Found = $true
         }
+      } else {
+        return @{
+          Found = $false
+          LatestVersion = $latestVersion
+          CurrentVersion = $CurrentVersion
+        }
+      }
+    } else {
+      Write-Verbose "Could not extract version from GitHub file"
+      return @{
+        Found = $false
+        Error = "Could not extract version from GitHub file"
       }
     }
   } catch {
-    # Silently fail if version check doesn't work
     Write-Verbose "Version check failed: $_"
+    return @{
+      Found = $false
+      Error = $_.Exception.Message
+    }
   }
-  
-  return $null
 }
 
 # Check if running as 64-bit process, if not, restart as 64-bit
@@ -1525,11 +1541,17 @@ if ($CheckVersions -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
   
   $versionInfo = Test-GitHubVersionCheck -Repository $GitHubRepository -CurrentVersion $scriptVersion -ScriptPath $scriptPath
   
-  if ($versionInfo) {
+  if ($versionInfo.Found -eq $true) {
     Update-Status "New version available: v$($versionInfo.LatestVersion) (Current: v$scriptVersion)"
     
     # Show version check dialog
     Show-VersionCheckDialog -UpdateInfo $versionInfo -ScriptPath $scriptPath
+  } elseif ($versionInfo.Found -eq $false) {
+    if ($versionInfo.Error) {
+      Update-Status "Version check failed: $($versionInfo.Error)" -Append
+    } else {
+      Update-Status "Version check completed. GitHub: v$($versionInfo.LatestVersion) | Current: v$scriptVersion (up to date)" -Append
+    }
   } else {
     Update-Status "Version check completed. Running latest version (v$scriptVersion)" -Append
   }
