@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.6"
+$scriptVersion = "1.0.7"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -139,15 +139,19 @@ $xaml = @"
         </Border>
         
         <!-- Main Content -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" CanContentScroll="False">
-            <StackPanel Margin="20,20,20,20">
-                
-                <!-- Action Buttons Section -->
-                <Border Background="#F3F4F6" CornerRadius="6" Padding="20" Margin="0,0,0,20">
-                    <StackPanel>
-                        <TextBlock Text="Test Data Management" FontSize="14" FontWeight="Bold" Foreground="#1F2937"/>
-                        <TextBlock Text="Generate or remove test data across all monitored system components" 
-                                   FontSize="10" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,0,0,15"/>
+        <Grid Grid.Row="1" Margin="20,20,20,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Action Buttons Section -->
+            <Border Grid.Row="0" Background="#F3F4F6" CornerRadius="6" Padding="20" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Test Data Management" FontSize="14" FontWeight="Bold" Foreground="#1F2937"/>
+                    <TextBlock Text="Generate or remove test data across all monitored system components" 
+                               FontSize="10" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,0,0,15"/>
                         
                         <!-- Buttons Grid -->
                         <Grid Margin="0,0,0,0">
@@ -244,7 +248,7 @@ $xaml = @"
                 </Border>
                 
                 <!-- Status Box -->
-                <Border Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="0" Margin="0,0,0,0">
+                <Border Grid.Row="2" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="0" Margin="0,0,0,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -266,9 +270,8 @@ $xaml = @"
                         </ScrollViewer>
                     </Grid>
                 </Border>
-                
-            </StackPanel>
-        </ScrollViewer>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>
 "@
