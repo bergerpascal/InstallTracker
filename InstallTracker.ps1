@@ -7,6 +7,9 @@
   PowerShell 5.1+; run as Administrator for best coverage.
 #>
 
+# Script version
+$scriptVersion = "1.0.3"
+
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -23,6 +26,8 @@ if (Test-Path $configFile) {
       [System.Environment]::ExpandEnvironmentVariables($_)
     }
     $ScanOptions = $config.scanOptions
+    $CheckForUpdates = if ($null -ne $config.checkForUpdates) { $config.checkForUpdates } else { $true }
+    $GitHubRepository = $config.gitHubRepository
   } catch {
     # Fallback if JSON parsing fails
     $RootPaths = @(
@@ -40,6 +45,8 @@ if (Test-Path $configFile) {
       startMenuShortcuts = $true
       scheduledTasks = $true
     }
+    $CheckForUpdates = $true
+    $GitHubRepository = $null
   }
 } else {
   # Default values if InstallTracker-Config.json doesn't exist
@@ -58,10 +65,46 @@ if (Test-Path $configFile) {
     startMenuShortcuts = $true
     scheduledTasks = $true
   }
+  $CheckForUpdates = $true
+  $GitHubRepository = "bergerpascal/InstallTracker"
 }
 
-# Script version
-$scriptVersion = "1.0.2"
+
+# Function to check for updates on GitHub
+function Test-GitHubUpdate {
+  param(
+    [string]$Repository,
+    [string]$CurrentVersion
+  )
+  
+  if ([string]::IsNullOrWhiteSpace($Repository)) {
+    return $null
+  }
+  
+  try {
+    $uri = "https://api.github.com/repos/$Repository/releases/latest"
+    $response = Invoke-WebRequest -Uri $uri -UseBasicParsing -ErrorAction Stop
+    $releaseInfo = $response.Content | ConvertFrom-Json
+    
+    if ($releaseInfo.tag_name) {
+      $latestVersion = $releaseInfo.tag_name -replace '^v', ''
+      
+      # Compare versions
+      if ([version]$latestVersion -gt [version]$CurrentVersion) {
+        return @{
+          LatestVersion = $latestVersion
+          DownloadUrl = $releaseInfo.html_url
+          ReleaseNotes = $releaseInfo.body
+        }
+      }
+    }
+  } catch {
+    # Silently fail if update check doesn't work
+    Write-Verbose "Update check failed: $_"
+  }
+  
+  return $null
+}
 
 # Check if running as 64-bit process, if not, restart as 64-bit
 if (-not [System.Environment]::Is64BitProcess) {
@@ -97,6 +140,87 @@ $uninstallKeyPaths = @(
 # --- GUI with persistent window and status display ---
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
+
+# Function to show update notification
+function Show-UpdateDialog {
+  param(
+    [hashtable]$UpdateInfo
+  )
+  
+  Add-Type -AssemblyName System.Windows.Forms
+  [System.Windows.Forms.Application]::EnableVisualStyles()
+  
+  $form = New-Object System.Windows.Forms.Form
+  $form.Text = "InstallTracker Update Available"
+  $form.Size = New-Object System.Drawing.Size(500, 300)
+  $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+  $form.TopMost = $true
+  $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+  $form.BackColor = [System.Drawing.Color]::FromArgb(255, 248, 249, 250)
+  
+  # Title
+  $titleLabel = New-Object System.Windows.Forms.Label
+  $titleLabel.Text = "A new version is available!"
+  $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+  $titleLabel.Location = New-Object System.Drawing.Point(20, 20)
+  $titleLabel.Size = New-Object System.Drawing.Size(450, 30)
+  $form.Controls.Add($titleLabel)
+  
+  # Version info
+  $infoLabel = New-Object System.Windows.Forms.Label
+  $infoLabel.Text = "Current version: $scriptVersion`r`nAvailable version: $($UpdateInfo.LatestVersion)"
+  $infoLabel.Location = New-Object System.Drawing.Point(20, 60)
+  $infoLabel.Size = New-Object System.Drawing.Size(450, 50)
+  $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+  $form.Controls.Add($infoLabel)
+  
+  # Release notes
+  $notesLabel = New-Object System.Windows.Forms.Label
+  $notesLabel.Text = "Release Notes:"
+  $notesLabel.Location = New-Object System.Drawing.Point(20, 120)
+  $notesLabel.Size = New-Object System.Drawing.Size(450, 20)
+  $notesLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+  $form.Controls.Add($notesLabel)
+  
+  # Release notes text box (readonly)
+  $notesBox = New-Object System.Windows.Forms.TextBox
+  $notesBox.Text = $UpdateInfo.ReleaseNotes
+  $notesBox.ReadOnly = $true
+  $notesBox.Multiline = $true
+  $notesBox.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
+  $notesBox.Location = New-Object System.Drawing.Point(20, 145)
+  $notesBox.Size = New-Object System.Drawing.Size(450, 80)
+  $notesBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+  $form.Controls.Add($notesBox)
+  
+  # Buttons
+  $yesButton = New-Object System.Windows.Forms.Button
+  $yesButton.Text = "Download Now"
+  $yesButton.Location = New-Object System.Drawing.Point(240, 240)
+  $yesButton.Size = New-Object System.Drawing.Size(110, 30)
+  $yesButton.BackColor = [System.Drawing.Color]::FromArgb(255, 59, 130, 246)
+  $yesButton.ForeColor = [System.Drawing.Color]::White
+  $yesButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+  $yesButton.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+  $form.Controls.Add($yesButton)
+  
+  $noButton = New-Object System.Windows.Forms.Button
+  $noButton.Text = "Later"
+  $noButton.Location = New-Object System.Drawing.Point(360, 240)
+  $noButton.Size = New-Object System.Drawing.Size(110, 30)
+  $noButton.BackColor = [System.Drawing.Color]::FromArgb(255, 209, 213, 219)
+  $noButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+  $noButton.DialogResult = [System.Windows.Forms.DialogResult]::No
+  $form.Controls.Add($noButton)
+  
+  $form.AcceptButton = $yesButton
+  $form.CancelButton = $noButton
+  
+  $result = $form.ShowDialog()
+  $form.Dispose()
+  
+  return $result -eq [System.Windows.Forms.DialogResult]::Yes
+}
 
 $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
@@ -1333,6 +1457,32 @@ $initialStatus = if ($isAdmin) {
 }
 
 $statusBox.Text = $initialStatus
+
+# Check for updates if enabled
+if ($CheckForUpdates -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
+  $statusBox.Text = "$initialStatus`n`nChecking for updates..."
+  $window.Dispatcher.Invoke([System.Action]{
+    $window.UpdateLayout()
+  }, "Normal")
+  
+  $updateInfo = Test-GitHubUpdate -Repository $GitHubRepository -CurrentVersion $scriptVersion
+  
+  if ($updateInfo) {
+    $statusBox.Text = $initialStatus
+    
+    # Show update dialog
+    if (Show-UpdateDialog -UpdateInfo $updateInfo) {
+      try {
+        # Open the release page in default browser
+        Start-Process $updateInfo.DownloadUrl
+      } catch {
+        Write-Host "Could not open browser: $_"
+      }
+    }
+  } else {
+    $statusBox.Text = $initialStatus
+  }
+}
 
 # Display the GUI window
 $window.ShowDialog() | Out-Null
