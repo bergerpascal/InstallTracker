@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.7"
+$scriptVersion = "1.0.8"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -85,8 +85,11 @@ function Test-GitHubVersionCheck {
   try {
     # Get raw InstallTracker.ps1 file from GitHub
     $rawUri = "https://raw.githubusercontent.com/$Repository/main/InstallTracker.ps1"
-    $response = Invoke-WebRequest -Uri $rawUri -UseBasicParsing -ErrorAction Stop
-    $fileContent = $response.Content
+    
+    # Add timeout to prevent hanging
+    $webClient = New-Object System.Net.WebClient
+    $webClient.Timeout = 5000  # 5 seconds timeout
+    $fileContent = $webClient.DownloadString($rawUri)
     
     # Extract version from file using regex
     if ($fileContent -match '\$scriptVersion\s*=\s*"([^"]+)"') {
@@ -118,10 +121,19 @@ function Test-GitHubVersionCheck {
       }
     }
   } catch {
-    Write-Verbose "Version check failed: $_"
+    $errorMsg = $_.Exception.Message
+    Write-Verbose "Version check failed: $errorMsg"
+    
+    # Provide helpful error messages
+    if ($errorMsg -like "*could not be resolved*" -or $errorMsg -like "*No such host*") {
+      $errorMsg = "Network error: Cannot reach GitHub. Check your internet connection or firewall settings."
+    } elseif ($errorMsg -like "*timeout*") {
+      $errorMsg = "Network error: GitHub connection timed out. Check your internet connection."
+    }
+    
     return @{
       Found = $false
-      Error = $_.Exception.Message
+      Error = $errorMsg
     }
   }
 }
