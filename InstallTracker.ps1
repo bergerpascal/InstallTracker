@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.3"
+$scriptVersion = "1.0.4"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -26,7 +26,7 @@ if (Test-Path $configFile) {
       [System.Environment]::ExpandEnvironmentVariables($_)
     }
     $ScanOptions = $config.scanOptions
-    $CheckForUpdates = if ($null -ne $config.checkForUpdates) { $config.checkForUpdates } else { $true }
+    $CheckVersions = if ($null -ne $config.checkVersions) { $config.checkVersions } else { $true }
     $GitHubRepository = $config.gitHubRepository
   } catch {
     # Fallback if JSON parsing fails
@@ -45,7 +45,7 @@ if (Test-Path $configFile) {
       startMenuShortcuts = $true
       scheduledTasks = $true
     }
-    $CheckForUpdates = $true
+    $CheckVersions = $true
     $GitHubRepository = $null
   }
 } else {
@@ -65,13 +65,13 @@ if (Test-Path $configFile) {
     startMenuShortcuts = $true
     scheduledTasks = $true
   }
-  $CheckForUpdates = $true
+  $CheckVersions = $true
   $GitHubRepository = "bergerpascal/InstallTracker"
 }
 
 
-# Function to check for updates on GitHub
-function Test-GitHubUpdate {
+# Function to check for version updates on GitHub
+function Test-GitHubVersionCheck {
   param(
     [string]$Repository,
     [string]$CurrentVersion
@@ -141,8 +141,8 @@ $uninstallKeyPaths = @(
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-# Function to show update notification
-function Show-UpdateDialog {
+# Function to show version check notification
+function Show-VersionCheckDialog {
   param(
     [hashtable]$UpdateInfo
   )
@@ -151,7 +151,7 @@ function Show-UpdateDialog {
   [System.Windows.Forms.Application]::EnableVisualStyles()
   
   $form = New-Object System.Windows.Forms.Form
-  $form.Text = "InstallTracker Update Available"
+  $form.Text = "InstallTracker Version Check"
   $form.Size = New-Object System.Drawing.Size(500, 300)
   $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
   $form.TopMost = $true
@@ -195,7 +195,7 @@ function Show-UpdateDialog {
   
   # Buttons
   $yesButton = New-Object System.Windows.Forms.Button
-  $yesButton.Text = "Download Now"
+  $yesButton.Text = "Go to Release"
   $yesButton.Location = New-Object System.Drawing.Point(240, 240)
   $yesButton.Size = New-Object System.Drawing.Size(110, 30)
   $yesButton.BackColor = [System.Drawing.Color]::FromArgb(255, 59, 130, 246)
@@ -1031,6 +1031,17 @@ $configBtn.Add_Click({
                                   Margin="0,0,0,0" Foreground="#374151" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
+                
+                <!-- Version Check Section -->
+                <TextBlock Text="Version Check" Margin="0,0,0,12" FontSize="13" FontWeight="SemiBold" Foreground="#1F2937"/>
+                <Border Margin="0,0,0,20" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Background="White" Padding="15">
+                    <StackPanel>
+                        <CheckBox Name="CheckVersionsCheckBox" Content="Check for new versions on startup" 
+                                  Margin="0,0,0,0" Foreground="#374151" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="Repository: bergerpascal/InstallTracker" 
+                                   Margin="0,12,0,0" Foreground="#6B7280" FontSize="10"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
         
@@ -1324,6 +1335,10 @@ $configBtn.Add_Click({
   $uninstallKeysCheckBox.IsChecked = $ScanOptions.uninstallKeys
   $shortcutsCheckBox.IsChecked = $ScanOptions.startMenuShortcuts
   
+  # Load version check options
+  $checkVersionsCheckBox = $configWindow.FindName("CheckVersionsCheckBox")
+  $checkVersionsCheckBox.IsChecked = $CheckVersions
+  
   # Add path button
   $addPathBtn.Add_Click({
     $newPath = $newPathTextBox.Text.Trim()
@@ -1382,6 +1397,8 @@ $configBtn.Add_Click({
     $configObject = @{
       rootPaths = $newRootPaths
       scanOptions = $newScanOptions
+      checkVersions = $checkVersionsCheckBox.IsChecked
+      gitHubRepository = "bergerpascal/InstallTracker"
       description = "Folders to scan for changes in InstallTracker (managed via GUI)"
     }
     
@@ -1392,6 +1409,7 @@ $configBtn.Add_Click({
       # Update global variables with newly saved settings
       $script:RootPaths = $newRootPaths
       $script:ScanOptions = $newScanOptions
+      $script:CheckVersions = $checkVersionsCheckBox.IsChecked
       
       $configWindow.Close()
     } catch {
@@ -1430,6 +1448,10 @@ $configBtn.Add_Click({
     $uninstallKeysCheckBox.IsChecked = $true
     $shortcutsCheckBox.IsChecked = $true
     
+    # Reset version check settings to defaults
+    $checkVersionsCheckBox.IsChecked = $true
+    $gitHubRepoTextBox.Text = "bergerpascal/InstallTracker"
+    
     $newPathTextBox.Clear()
     
     [System.Windows.MessageBox]::Show("Settings reset to defaults.", "Reset Complete", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
@@ -1458,20 +1480,20 @@ $initialStatus = if ($isAdmin) {
 
 $statusBox.Text = $initialStatus
 
-# Check for updates if enabled
-if ($CheckForUpdates -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
-  $statusBox.Text = "$initialStatus`n`nChecking for updates..."
+# Check for version updates if enabled
+if ($CheckVersions -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
+  $statusBox.Text = "$initialStatus`n`nChecking for new versions..."
   $window.Dispatcher.Invoke([System.Action]{
     $window.UpdateLayout()
   }, "Normal")
   
-  $updateInfo = Test-GitHubUpdate -Repository $GitHubRepository -CurrentVersion $scriptVersion
+  $versionInfo = Test-GitHubVersionCheck -Repository $GitHubRepository -CurrentVersion $scriptVersion
   
-  if ($updateInfo) {
+  if ($versionInfo) {
     $statusBox.Text = $initialStatus
     
-    # Show update dialog
-    if (Show-UpdateDialog -UpdateInfo $updateInfo) {
+    # Show version check dialog
+    if (Show-VersionCheckDialog -UpdateInfo $versionInfo) {
       try {
         # Open the release page in default browser
         Start-Process $updateInfo.DownloadUrl
