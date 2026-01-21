@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.10"
+$scriptVersion = "1.0.11"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -27,7 +27,7 @@ if (Test-Path $configFile) {
     }
     $ScanOptions = $config.scanOptions
     $CheckVersions = if ($null -ne $config.checkVersions) { $config.checkVersions } else { $true }
-    $GitHubRepository = $config.gitHubRepository
+    $GitHubRepository = if ($config.gitHubRepository) { $config.gitHubRepository } else { "bergerpascal/InstallTracker" }
   } catch {
     # Fallback if JSON parsing fails
     $RootPaths = @(
@@ -46,7 +46,7 @@ if (Test-Path $configFile) {
       scheduledTasks = $true
     }
     $CheckVersions = $true
-    $GitHubRepository = $null
+    $GitHubRepository = "bergerpascal/InstallTracker"
   }
 } else {
   # Default values if InstallTracker-Config.json doesn't exist
@@ -69,73 +69,68 @@ if (Test-Path $configFile) {
   $GitHubRepository = "bergerpascal/InstallTracker"
 }
 
+# CHECK FOR UPDATES AT STARTUP (before GUI) with absolute error protection
+$script:updateAvailable = $false
+$script:updateInfo = $null
 
-# Function to check for version updates on GitHub
-function Test-GitHubVersionCheck {
-  param(
-    [string]$Repository,
-    [string]$CurrentVersion,
-    [string]$ScriptPath
-  )
-  
-  if ([string]::IsNullOrWhiteSpace($Repository)) {
-    return $null
-  }
+# If this is a restart after update, skip the update check
+$isUpdateRestart = $env:INSTALLTRACKER_UPDATE_RESTART -eq "1"
+
+if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) {
+  $oldEA = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
   
   try {
-    $rawUri = "https://raw.githubusercontent.com/$Repository/refs/heads/main/InstallTracker.ps1"
+    $scriptPath = $MyInvocation.MyCommand.Path
+    if (-not $scriptPath) { $scriptPath = $PSCommandPath }
     
-    $webClient = New-Object System.Net.WebClient
-    $webClient.Timeout = 15000  # 15 seconds timeout
+    # Simple version check - try to get latest version from GitHub
+    $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker.ps1"
     
-    $fileContent = $webClient.DownloadString($rawUri)
-    
-    # Extract version from file using regex
-    if ($fileContent -match '\$scriptVersion\s*=\s*"([^"]+)"') {
-      $latestVersion = $matches[1]
+    try {
+      $webClient = New-Object System.Net.WebClient
+      $webClient.Timeout = 3000
+      $content = $webClient.DownloadString($uri)
       
-      Write-Verbose "Found version on GitHub: $latestVersion, Current: $CurrentVersion"
-      
-      # Compare versions
-      if ([version]$latestVersion -gt [version]$CurrentVersion) {
-        return @{
-          LatestVersion = $latestVersion
-          DownloadUrl = $rawUri
-          FileContent = $fileContent
-          RepoUrl = "https://github.com/$Repository"
-          Found = $true
-        }
-      } else {
-        return @{
-          Found = $false
-          LatestVersion = $latestVersion
-          CurrentVersion = $CurrentVersion
+      if ($content -match '\$scriptVersion\s*=\s*"([^"]+)"') {
+        $latestVersion = $matches[1]
+        if ([version]$latestVersion -gt [version]$scriptVersion) {
+          $script:updateAvailable = $true
+          $script:updateInfo = @{
+            LatestVersion = $latestVersion
+            DownloadUrl = $uri
+            ScriptPath = $scriptPath
+          }
         }
       }
-    } else {
-      Write-Verbose "Could not extract version from GitHub file"
-      return @{
-        Found = $false
-        Error = "Could not find version in InstallTracker.ps1"
+    } catch {
+      # Try with Invoke-WebRequest as fallback
+      try {
+        $response = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing
+        $content = $response.Content
+        
+        if ($content -match '\$scriptVersion\s*=\s*"([^"]+)"') {
+          $latestVersion = $matches[1]
+          if ([version]$latestVersion -gt [version]$scriptVersion) {
+            $script:updateAvailable = $true
+            $script:updateInfo = @{
+              LatestVersion = $latestVersion
+              DownloadUrl = $uri
+              ScriptPath = $scriptPath
+            }
+          }
+        }
+      } catch {
+        # Silently ignore
       }
     }
   } catch {
-    $errorMsg = $_.Exception.Message
-    Write-Verbose "Version check failed: $errorMsg"
-    
-    # Provide helpful error messages
-    if ($errorMsg -like "*could not be resolved*" -or $errorMsg -like "*No such host*") {
-      $errorMsg = "Network error: Cannot reach GitHub. Check your internet connection or firewall settings."
-    } elseif ($errorMsg -like "*timeout*" -or $errorMsg -like "*timed out*") {
-      $errorMsg = "Network error: GitHub connection timed out (>15s). GitHub might be slow or unreachable."
-    }
-    
-    return @{
-      Found = $false
-      Error = $errorMsg
-    }
+    # Silently ignore all errors
+  } finally {
+    $ErrorActionPreference = $oldEA
   }
 }
+
 
 # Check if running as 64-bit process, if not, restart as 64-bit
 if (-not [System.Environment]::Is64BitProcess) {
@@ -172,115 +167,7 @@ $uninstallKeyPaths = @(
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-# Function to show version check notification
-function Show-VersionCheckDialog {
-  param(
-    [hashtable]$UpdateInfo,
-    [string]$ScriptPath
-  )
-  
-  Add-Type -AssemblyName System.Windows.Forms
-  [System.Windows.Forms.Application]::EnableVisualStyles()
-  
-  $form = New-Object System.Windows.Forms.Form
-  $form.Text = "InstallTracker Version Check"
-  $form.Size = New-Object System.Drawing.Size(500, 280)
-  $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-  $form.TopMost = $true
-  $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-  $form.BackColor = [System.Drawing.Color]::FromArgb(255, 248, 249, 250)
-  
-  # Title
-  $titleLabel = New-Object System.Windows.Forms.Label
-  $titleLabel.Text = "A new version is available!"
-  $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
-  $titleLabel.Location = New-Object System.Drawing.Point(20, 20)
-  $titleLabel.Size = New-Object System.Drawing.Size(450, 30)
-  $form.Controls.Add($titleLabel)
-  
-  # Version info
-  $infoLabel = New-Object System.Windows.Forms.Label
-  $infoLabel.Text = "Current version: $scriptVersion`r`nAvailable version: $($UpdateInfo.LatestVersion)"
-  $infoLabel.Location = New-Object System.Drawing.Point(20, 60)
-  $infoLabel.Size = New-Object System.Drawing.Size(450, 50)
-  $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-  $form.Controls.Add($infoLabel)
-  
-  $dialogResult = [System.Windows.Forms.DialogResult]::No
-  
-  # Download and Update button
-  $yesButton = New-Object System.Windows.Forms.Button
-  $yesButton.Text = "Download & Update"
-  $yesButton.Location = New-Object System.Drawing.Point(180, 220)
-  $yesButton.Size = New-Object System.Drawing.Size(140, 30)
-  $yesButton.BackColor = [System.Drawing.Color]::FromArgb(255, 59, 130, 246)
-  $yesButton.ForeColor = [System.Drawing.Color]::White
-  $yesButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-  $form.Controls.Add($yesButton)
-  
-  # Later button
-  $noButton = New-Object System.Windows.Forms.Button
-  $noButton.Text = "Later"
-  $noButton.Location = New-Object System.Drawing.Point(330, 220)
-  $noButton.Size = New-Object System.Drawing.Size(110, 30)
-  $noButton.BackColor = [System.Drawing.Color]::FromArgb(255, 209, 213, 219)
-  $noButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-  $form.Controls.Add($noButton)
-  
-  # Button event handlers
-  $yesButton.Add_Click({
-    $dialogResult = [System.Windows.Forms.DialogResult]::Yes
-    $form.DialogResult = [System.Windows.Forms.DialogResult]::Yes
-    $form.Close()
-  })
-  
-  $noButton.Add_Click({
-    $dialogResult = [System.Windows.Forms.DialogResult]::No
-    $form.DialogResult = [System.Windows.Forms.DialogResult]::No
-    $form.Close()
-  })
-  
-  $form.AcceptButton = $yesButton
-  $form.CancelButton = $noButton
-  
-  $result = $form.ShowDialog()
-  $form.Dispose()
-  
-  if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-    # Download new script
-    try {
-      $tempPath = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.ps1'
-      Write-Host "Downloading new version to: $tempPath"
-      
-      $webClient = New-Object System.Net.WebClient
-      $webClient.DownloadFile($UpdateInfo.DownloadUrl, $tempPath)
-      
-      # Backup old script
-      $backupPath = $ScriptPath -replace '\.ps1$', '_backup.ps1'
-      Copy-Item -Path $ScriptPath -Destination $backupPath -Force
-      
-      # Replace old script with new one
-      Copy-Item -Path $tempPath -Destination $ScriptPath -Force
-      Remove-Item -Path $tempPath -Force
-      
-      # Restart script with new version
-      Write-Host "Script updated successfully. Restarting with new version..."
-      Start-Sleep -Seconds 1
-      
-      & $ScriptPath
-      exit
-    } catch {
-      [System.Windows.Forms.MessageBox]::Show(
-        "Error downloading update: $($_.Exception.Message)",
-        "Download Error",
-        [System.Windows.MessageBoxButtons]::OK,
-        [System.Windows.MessageBoxIcon]::Error
-      ) | Out-Null
-    }
-  }
-  
-  return $false
-}
+# Function to show version check notification (using WPF, not Windows Forms)
 
 $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
@@ -1283,7 +1170,7 @@ $configBtn.Add_Click({
     $infoWindow.Content = $mainGrid
     
     $closeBtn.Add_Click({ $infoWindow.Close() })
-    $infoWindow.ShowDialog() | Out-Null
+    $infoWindow.Show() | Out-Null
   })
   
   # Uninstall Keys info button click handler
@@ -1379,7 +1266,7 @@ $configBtn.Add_Click({
     $infoWindow.Content = $mainGrid
     
     $closeBtn.Add_Click({ $infoWindow.Close() })
-    $infoWindow.ShowDialog() | Out-Null
+    $infoWindow.Show() | Out-Null
   })
   
   # Load current paths
@@ -1518,7 +1405,7 @@ $configBtn.Add_Click({
   })
   
   $configWindow.Owner = $window
-  $configWindow.ShowDialog() | Out-Null
+  $configWindow.Show() | Out-Null
   
   $preBtn.IsEnabled = $true
   $postBtn.IsEnabled = $true
@@ -1540,36 +1427,74 @@ $initialStatus = if ($isAdmin) {
 
 $statusBox.Text = $initialStatus
 
-# Check for version updates if enabled
-if ($CheckVersions -and -not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
-  $statusBox.Text = "$initialStatus`n`nChecking for new versions..."
-  $window.Dispatcher.Invoke([System.Action]{
-    $window.UpdateLayout()
-  }, "Normal")
+# Show update notification at startup if available
+if ($script:updateAvailable -eq $true -and $script:updateInfo) {
+  $oldEA = $ErrorActionPreference
+  $ErrorActionPreference = 'SilentlyContinue'
   
-  $scriptPath = $MyInvocation.MyCommand.Path
-  if (-not $scriptPath) { $scriptPath = $PSCommandPath }
-  
-  $versionInfo = Test-GitHubVersionCheck -Repository $GitHubRepository -CurrentVersion $scriptVersion -ScriptPath $scriptPath
-  
-  if ($versionInfo.Found -eq $true) {
-    Update-Status "New version available: v$($versionInfo.LatestVersion) (Current: v$scriptVersion)"
+  try {
+    $result = [System.Windows.MessageBox]::Show(
+      "A new version is available!`n`nInstalled: v$scriptVersion`nAvailable: v$($script:updateInfo.LatestVersion)`n`nDo you want to download and install the update?",
+      "InstallTracker Update",
+      [System.Windows.MessageBoxButton]::YesNo,
+      [System.Windows.MessageBoxImage]::Information
+    )
     
-    # Show version check dialog
-    Show-VersionCheckDialog -UpdateInfo $versionInfo -ScriptPath $scriptPath
-  } elseif ($versionInfo.Found -eq $false) {
-    if ($versionInfo.Error) {
-      Update-Status "Version check failed: $($versionInfo.Error)" -Append
-    } else {
-      Update-Status "Version check completed. GitHub: v$($versionInfo.LatestVersion) | Current: v$scriptVersion (up to date)" -Append
+    if ($result -eq "Yes") {
+      try {
+        $tempDownloadPath = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.ps1'
+        $wc = New-Object System.Net.WebClient
+        $wc.DownloadFile($script:updateInfo.DownloadUrl, $tempDownloadPath)
+        
+        # Create backup of current version
+        $backupPath = $script:updateInfo.ScriptPath -replace '\.ps1$', '_backup.ps1'
+        Copy-Item -Path $script:updateInfo.ScriptPath -Destination $backupPath -Force
+        
+        # Wait for download to complete
+        Start-Sleep -Milliseconds 500
+        
+        # Delete the original file first to clear any file locks/caches
+        Remove-Item -Path $script:updateInfo.ScriptPath -Force
+        
+        # Wait a moment
+        Start-Sleep -Milliseconds 300
+        
+        # Copy the new version to the original location
+        Copy-Item -Path $tempDownloadPath -Destination $script:updateInfo.ScriptPath -Force
+        
+        # Clean up temp file
+        Remove-Item -Path $tempDownloadPath -Force
+        
+        [System.Windows.MessageBox]::Show(
+          "Update installed successfully!`n`nThe script will now restart.",
+          "Update Complete",
+          [System.Windows.MessageBoxButton]::OK,
+          [System.Windows.MessageBoxImage]::Information
+        ) | Out-Null
+        
+        # Wait to ensure everything is written to disk
+        Start-Sleep -Milliseconds 1000
+        
+        # Start the new script in a NEW process using Start-Process
+        $scriptPath = $script:updateInfo.ScriptPath
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath -WindowStyle Normal
+        
+        # Exit the old process completely
+        exit 0
+      } catch {
+        # Silently ignore download errors
+      }
     }
-  } else {
-    Update-Status "Version check completed. Running latest version (v$scriptVersion)" -Append
+  } catch {
+    # Silently ignore all errors
   }
-} else {
-  if (-not $CheckVersions) {
-    Update-Status "Version check disabled in settings" -Append
-  }
+  
+  $ErrorActionPreference = $oldEA
+}
+
+# If this is an update restart, skip the GUI and exit - the new version will show it
+if ($isUpdateRestart) {
+  exit 0
 }
 
 # Display the GUI window
