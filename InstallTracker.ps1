@@ -1,14 +1,37 @@
 <#
 .SYNOPSIS
-  Takes before/after snapshots and produces diffs for Windows Services,
-  Scheduled Tasks, Run/RunOnce registry entries, folders, and shortcuts.
+  InstallTracker - A comprehensive Windows system change tracking tool that creates detailed
+  before/after snapshots to document and analyze all modifications to your system.
+
+.DESCRIPTION
+  This tool captures comprehensive snapshots of your Windows system state and compares them to
+  identify exactly what changed. It tracks:
+  - Windows Services (name, display name, startup mode, state, path)
+  - Scheduled Tasks (task path, name, state, actions)
+  - Registry Run/RunOnce entries (auto-start programs)
+  - Installed applications (Uninstall registry keys)
+  - Folder structure and directory changes
+  - File additions and deletions
+  - Start Menu shortcuts
+
+  Create a PRE snapshot before making system changes, then a POST snapshot after to generate
+  a detailed change report showing all additions and removals.
+
+.PARAMETER None
+  This script uses a GUI for all interactions.
 
 .NOTES
-  PowerShell 5.1+; run as Administrator for best coverage.
+  Requirements:
+  - PowerShell 5.1 or higher
+  - .NET Framework 4.7.2+
+  - Windows 10 or later
+  - Administrator rights recommended for full system coverage
+  
+  Created with WhiteCoding - AI-assisted development for VS Code
 #>
 
 # Script version
-$scriptVersion = "1.0.23"
+$scriptVersion = "1.0.24"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -81,7 +104,7 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     $scriptPath = $MyInvocation.MyCommand.Path
     if (-not $scriptPath) { $scriptPath = $PSCommandPath }
     
-    # Simple version check - try to get latest version from GitHub
+    # Fast version check using Range Request - only download first 5KB (version is at the top)
     # Add timestamp to avoid CDN caching
     $cacheParam = [int64](Get-Date -UFormat %s)
     $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker.ps1?t=$cacheParam"
@@ -90,13 +113,28 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     $content = $null
     
     try {
-      $webClient = New-Object System.Net.WebClient
-      $webClient.Timeout = 3000
-      $content = $webClient.DownloadString($uri)
+      # Use Range header to get only first 5KB - much faster!
+      $webRequest = [System.Net.HttpWebRequest]::Create($uri)
+      $webRequest.Timeout = 2000
+      $webRequest.AddRange(0, 5120)
+      
+      try {
+        $webResponse = $webRequest.GetResponse()
+        $stream = $webResponse.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($stream)
+        $content = $reader.ReadToEnd()
+        $reader.Close()
+        $webResponse.Close()
+      } catch {
+        # If Range not supported, fallback to regular download
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Timeout = 2000
+        $content = $webClient.DownloadString($uri)
+      }
     } catch {
       # Try with Invoke-WebRequest as fallback
       try {
-        $response = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing
+        $response = Invoke-WebRequest -Uri $uri -TimeoutSec 2 -UseBasicParsing -Headers @{Range="bytes=0-5120"}
         $content = $response.Content
       } catch {
         # Network error - skip version check
@@ -197,6 +235,7 @@ $xaml = @"
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="25,20,0,20">
                 <TextBlock Text="InstallTracker" 
@@ -205,9 +244,35 @@ $xaml = @"
                            FontSize="11" Foreground="#9CA3AF" 
                            Margin="0,5,0,0"/>
             </StackPanel>
-            <TextBlock Grid.Column="1" Text="v$scriptVersion" 
-                       FontSize="12" Foreground="#6B7280" FontWeight="SemiBold"
-                       VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,25,0"/>
+            <Border Grid.Column="1" VerticalAlignment="Center" Background="#10B981" 
+                    CornerRadius="4" Height="36" Margin="0,0,15,0" Padding="12,0">
+                <TextBlock Text="v$scriptVersion" FontSize="10" Foreground="White" FontWeight="Bold"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+            </Border>
+            <Button Name="HelpButton" Grid.Column="2" Content="?" 
+                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,25,0"
+                    Width="36" Height="36" FontSize="16" FontWeight="Bold"
+                    Background="#3B82F6" Foreground="White" Cursor="Hand"
+                    BorderThickness="0">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="4" Background="{TemplateBinding Background}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#2563EB"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
         </Grid>
         
         <!-- Control Panel -->
@@ -406,6 +471,7 @@ $postBtn = $window.FindName("PostButton")
 $exitBtn = $window.FindName("ExitButton")
 $statusBox = $window.FindName("StatusBox")
 $configBtn = $window.FindName("ConfigButton")
+$helpBtn = $window.FindName("HelpButton")
 
 function Update-Status {
   param([string]$Message, [switch]$Append)
@@ -1559,6 +1625,16 @@ $configBtn.Add_Click({
 
 $exitBtn.Add_Click({
   $window.Close()
+})
+
+# Help button - Open GitHub README
+$helpBtn.Add_Click({
+  $readmeUrl = "https://github.com/$GitHubRepository/blob/main/README.md"
+  try {
+    Start-Process $readmeUrl
+  } catch {
+    [System.Windows.MessageBox]::Show("Could not open browser to README.`n`nURL: $readmeUrl", "Help", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+  }
 })
 
 # Check if script is running as Administrator
