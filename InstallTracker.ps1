@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.22"
+$scriptVersion = "1.0.23"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -769,34 +769,40 @@ function Invoke-Snapshot {
       $report += ""
 
       $svcDiff = Compare-Json -base 'services' -keys @('Name')
+      Update-Status "Services comparison: Added=$($svcDiff.Added.Count), Removed=$($svcDiff.Removed.Count)" -Append
       $report += "## New Services: $($svcDiff.Added.Count)"
       $report += @($svcDiff.Added | Sort-Object Name | Select-Object Name,DisplayName,StartMode,State,PathName | Format-Table | Out-String)
       $report += "## Removed Services: $($svcDiff.Removed.Count)"
       $report += @($svcDiff.Removed | Sort-Object Name | Select-Object Name,DisplayName,StartMode,State,PathName | Format-Table | Out-String)
 
       $tskDiff = Compare-Json -base 'tasks' -keys @('TaskPath','TaskName')
+      Update-Status "Scheduled Tasks comparison: Added=$($tskDiff.Added.Count), Removed=$($tskDiff.Removed.Count)" -Append
       $report += "## New Scheduled Tasks: $($tskDiff.Added.Count)"
       $report += @($tskDiff.Added | Sort-Object TaskPath,TaskName | Select-Object TaskPath,TaskName,State,Actions | Format-Table | Out-String)
       $report += "## Removed Scheduled Tasks: $($tskDiff.Removed.Count)"
       $report += @($tskDiff.Removed | Sort-Object TaskPath,TaskName | Select-Object TaskPath,TaskName,State,Actions | Format-Table | Out-String)
 
       $runDiff = Compare-Json -base 'runkeys' -keys @('HivePath','Name')
+      Update-Status "Run/RunOnce Keys comparison: Added=$($runDiff.Added.Count), Removed=$($runDiff.Removed.Count)" -Append
       $report += "## New Run/RunOnce Entries: $($runDiff.Added.Count)"
       $report += @($runDiff.Added | Sort-Object HivePath,Name | Select-Object HivePath,Name,Value | Format-Table | Out-String)
       $report += "## Removed Run/RunOnce Entries: $($runDiff.Removed.Count)"
       $report += @($runDiff.Removed | Sort-Object HivePath,Name | Select-Object HivePath,Name,Value | Format-Table | Out-String)
 
       $uninstallDiff = Compare-Json -base 'uninstall' -keys @('HivePath','SubkeyName')
+      Update-Status "Uninstall Keys comparison: Added=$($uninstallDiff.Added.Count), Removed=$($uninstallDiff.Removed.Count)" -Append
       $report += "## New Uninstall Entries: $($uninstallDiff.Added.Count)"
       $report += @($uninstallDiff.Added | Sort-Object HivePath,SubkeyName | Select-Object HivePath,SubkeyName,DisplayName,DisplayVersion | Format-Table | Out-String)
       $report += "## Removed Uninstall Entries: $($uninstallDiff.Removed.Count)"
       $report += @($uninstallDiff.Removed | Sort-Object HivePath,SubkeyName | Select-Object HivePath,SubkeyName,DisplayName,DisplayVersion | Format-Table | Out-String)
 
       $fldDiff = Compare-Json -base 'folders' -keys @('FullName')
+      Update-Status "Folders comparison: Added=$($fldDiff.Added.Count), Removed=$($fldDiff.Removed.Count)" -Append
       $report += "## Newly Created Folders: $($fldDiff.Added.Count)"
       $report += @($fldDiff.Added | Sort-Object FullName | Select-Object FullName,CreationTime | Format-Table | Out-String)
 
       $lnkDiff = Compare-Json -base 'shortcuts' -keys @('FullName')
+      Update-Status "Shortcuts comparison: Added=$($lnkDiff.Added.Count), Removed=$($lnkDiff.Removed.Count)" -Append
       $report += "## New Shortcuts: $($lnkDiff.Added.Count)"
       $report += @($lnkDiff.Added | Sort-Object FullName | Select-Object FullName,CreationTime | Format-Table | Out-String)
 
@@ -809,8 +815,15 @@ function Invoke-Snapshot {
       $txtPath = Join-Path $snapshotRootDir ("ChangeReport_{0}.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
       $report | Out-String -Width 120 | Set-Content -Encoding UTF8 $txtPath
       Update-Status "Report created: $txtPath" -Append
-      
-      # Ask user if they want to open the report
+    }
+    
+    $endTime = Get-Date
+    $duration = $endTime - $startTime
+    $durationStr = "{0:D2}:{1:D2}:{2:D2}" -f $duration.Hours, $duration.Minutes, $duration.Seconds
+    Update-Status "SUCCESS: $SelectedMode snapshot completed successfully! (Duration: $durationStr)" -Append
+    
+    # Ask user if they want to open the report (only for POST mode)
+    if ($SelectedMode -eq 'Post') {
       $openReport = [System.Windows.MessageBox]::Show(
         "Report has been created. Do you want to open it?",
         "Open Report?",
@@ -822,11 +835,6 @@ function Invoke-Snapshot {
         Invoke-Item $txtPath
       }
     }
-    
-    $endTime = Get-Date
-    $duration = $endTime - $startTime
-    $durationStr = "{0:D2}:{1:D2}:{2:D2}" -f $duration.Hours, $duration.Minutes, $duration.Seconds
-    Update-Status "SUCCESS: $SelectedMode snapshot completed successfully! (Duration: $durationStr)" -Append
   }
   catch {
     Update-Status "ERROR: $($_.Exception.Message)" -Append
@@ -1488,7 +1496,8 @@ $configBtn.Add_Click({
       $script:ScanOptions = $newScanOptions
       $script:CheckVersions = $script:checkVersionsCheckBox.IsChecked
       
-      $configWindow.Close()
+      $script:configWindow.Close()
+      $window.Activate()
     } catch {
       [System.Windows.MessageBox]::Show("Error saving config: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
     }
@@ -1540,6 +1549,7 @@ $configBtn.Add_Click({
   
   $script:configWindow.Owner = $window
   $script:configWindow.Show() | Out-Null
+  $window.Activate()
   
   $preBtn.IsEnabled = $true
   $postBtn.IsEnabled = $true

@@ -1,197 +1,335 @@
 # InstallTracker
 
-A PowerShell tool for tracking and analyzing system changes on Windows computers. Creates detailed snapshots of installed programs, services, tasks, registry entries, and other system components.
+A PowerShell tool for tracking and analyzing system changes on Windows computers. Creates detailed snapshots of installed programs, services, tasks, registry entries, file systems, and other system components.
+
+## 🎨 Created with WhiteCoding
+
+This entire project was created using **WhiteCoding** - no lines of code were manually written. All development, debugging, and optimization was done using VS Code and AI Agents. This demonstrates the power of modern AI-assisted development workflows.
 
 ## 📋 Overview
 
 **InstallTracker** is a configuration management system that documents and analyzes system changes. It enables you to perform "before-and-after" comparisons and quickly identify what changes were made to a system.
 
-## 🎯 Key Features
+## 🎯 Core Applications
 
-### InstallTracker.ps1
+### 1. InstallTracker.ps1 (Main Application)
 
-The main script with graphical user interface:
+The primary script with a modern graphical user interface for system change tracking:
 
+#### Features:
 - **Create Snapshots**: Captures the current system state in CSV and JSON format
-- **Configurable Tracking**: Choose which components to monitor:
-  - 📦 Installed Programs (Uninstall Registry)
+- **Pre/Post Analysis**: Create a PRE snapshot, make changes, then create a POST snapshot to see what changed
+- **Comprehensive Tracking** of:
+  - 📦 Installed Programs (Uninstall Registry Keys)
   - 🔧 Windows Services
   - 📅 Scheduled Tasks
-  - 🔐 Registry Run Keys
+  - 🔐 Registry Run/RunOnce Keys
+  - 📁 Folders and Directory Structure
   - 🚀 Shortcuts and Startup Programs
-  - ✅ Version Checks
+  - 📄 All Files with detailed metadata
 
-- **Custom Paths**: Define root paths for tracking custom installations
+#### Advanced Features:
+- **Custom Scan Paths**: Define any root paths for tracking custom installations
   - Supports environment variables (%USERPROFILE%, %APPDATA%, etc.)
-  - Persistent configuration in JSON
+  - Handles hidden folders (AppData, System folders, etc.)
+  - Persistent configuration in JSON format
+  - GUI-based path management
   
-- **Comprehensive Reports**: Detailed output files in CSV and JSON format
-  - Timestamp-based file names
-  - Structured data for easy analysis
+- **Detailed Change Reports**: 
+  - Automatic before/after comparison
+  - Formatted text reports with all changes listed
+  - Separate counts for added/removed items by category
+  - Timestamp-based file organization
+  
+- **Automatic Version Checking**: 
+  - Checks GitHub for new versions at startup
+  - Automatic download and installation
+  - Seamless update process with backup
 
-- **Automatic Updates**: Checks GitHub for new versions and installs updates automatically
+- **Modern UI**: 
+  - WPF-based graphical interface
+  - Color-coded status messages
+  - Real-time progress updates
+  - Settings management panel
 
-### InstallTracker-TestData.ps1
+---
 
-Helper script for generating test data:
+### 2. InstallTracker-TestData.ps1 (Testing Helper)
 
-- **Create Test Data**: Generates files and directories at various system locations:
-  - `C:\Program Files\` simulations
-  - `%LOCALAPPDATA%\` directory structures
-  - Registry entries for versions
-  - Shortcuts and startup programs
+A companion script for generating and cleaning up test data:
 
-- **Delete Test Data**: Cleans up all created test data and restores the clean state
+#### Purpose:
+- **Development Testing**: Generate test files and registry entries for development
+- **Training**: Create sample installations to test InstallTracker functionality
+- **Validation**: Verify that InstallTracker correctly tracks changes
 
-- **Automatic Updates**: Like InstallTracker with GitHub integration
+#### Capabilities:
+- **Create Test Data**: Generates realistic system changes:
+  - Test folders in `C:\Program Files\`
+  - Test files in `%LOCALAPPDATA%\`
+  - Registry entries simulating installations
+  - Test shortcuts and startup programs
+  - Sample service entries
+
+- **Delete Test Data**: Cleans up all created test data:
+  - Removes test folders and files
+  - Cleans up registry entries
+  - Restores system to clean state
+
+- **Safe Operation**:
+  - Only creates/removes data it created
+  - Confirmation prompts before deletion
+  - Error handling and rollback capabilities
+
+---
 
 ## 🚀 Getting Started
 
 ### Requirements
 
 - Windows PowerShell 5.1 or higher
-- Administrator rights (for full access to registry and services)
-- .NET Framework 4.7.2+ (for JSON processing)
+- Optional Administrator rights (for full access to registry, services, and system folders)
+- .NET Framework 4.7.2+ (for JSON processing and WPF UI)
+- Windows 10 or later
 
+### Installation
+
+1. Download both scripts to a folder:
+   - `InstallTracker.ps1`
+   - `InstallTracker-TestData.ps1` (optional)
+
+2. Right-click PowerShell and select "Run as Administrator"
+
+3. Run the script:
+   ```powershell
+   & "C:\path\to\InstallTracker.ps1"
+   ```
 
 ### Basic Usage
 
-#### Start InstallTracker
+#### Using InstallTracker (Main Script)
+
+1. **First Run - Create PRE Snapshot**:
+   - Click the **"PRE"** button
+   - System will scan and capture current state
+   - Results saved to `_Snapshots\Reports_Pre\`
+
+2. **Make System Changes**:
+   - Install new software
+   - Add/delete files
+   - Modify settings
+   - Any other changes you want to track
+
+3. **Create POST Snapshot**:
+   - Click the **"POST"** button
+   - System will scan again and compare with PRE
+   - Automatic report generated showing all changes
+
+4. **Review Report**:
+   - Report opens automatically (option to open)
+   - Shows all added/removed items by category
+   - Save report for documentation
+
+#### Configuring Scan Paths and other settings
+
+1. Click **"SETTINGS"** button
+2. In the settings panel:
+   - **Add Path**: Enter folder path and click "Add"
+   - **Remove Path**: Select path and click "Remove"
+   - **Enable/Disable Scans**: Check/uncheck scan options
+   - **Version Check**: Enable automatic update checking
+3. Click **"SAVE SETTINGS"** to persist changes
+
+#### Using TestData Script (Optional)
 
 ```powershell
-# With GUI
-powershell -NoProfile -ExecutionPolicy Bypass -File "InstallTracker.ps1"
-```
+# Create test installations and files
+& "C:\path\to\InstallTracker-TestData.ps1" -Action Create
 
-The GUI will be displayed with the following options:
-
-1. **Enable Categories**: Check boxes for desired tracking categories
-2. **Configure Root Paths**: 
-   - Click "SETTINGS" button
-   - Add new paths (supports environment variables)
-   - Save
-3. **Create Snapshot**: Click "PRE" or "POST" button to generate reports
-
-Reports are saved in the `_Snapshots/` directory.
-
-#### Generate Test Data
-
-```powershell
-# Create test data
-powershell -NoProfile -ExecutionPolicy Bypass -File "InstallTracker-TestData.ps1" -Action Create
-
-# Delete test data
-powershell -NoProfile -ExecutionPolicy Bypass -File "InstallTracker-TestData.ps1" -Action Delete
+# Later: Clean up all test data
+& "C:\path\to\InstallTracker-TestData.ps1" -Action Delete
 ```
 
 ## 📁 Directory Structure
 
 ```
 InstallTracker/
-├── InstallTracker.ps1              # Main application with GUI
-├── InstallTracker-TestData.ps1     # Test data generator
-├── InstallTracker-Config.json      # Configuration file (auto-created)
-└── _Snapshots/                     # Generated reports
-    └── Reports_Pre/                # Snapshot files
-        ├── services_*.csv          # Services export
-        ├── services_*.json
-        ├── runkeys_*.csv           # Registry exports
-        ├── runkeys_*.json
-        ├── tasks_*.csv             # Tasks exports
-        ├── tasks_*.json
-        ├── uninstall_*.csv         # Programs exports
-        └── uninstall_*.json
+├── InstallTracker.ps1                 # Main application (GUI)
+├── InstallTracker-TestData.ps1        # Test data generator
+├── InstallTracker-Config.json         # Configuration (auto-created)
+├── README.md                          # This file
+└── _Snapshots/                        # Generated reports
+    ├── Reports_Pre/                   # PRE snapshot files
+    │   ├── services_pre_*.csv/.json
+    │   ├── tasks_pre_*.csv/.json
+    │   ├── runkeys_pre_*.csv/.json
+    │   ├── uninstall_pre_*.csv/.json
+    │   ├── folders_pre_*.csv/.json
+    │   ├── shortcuts_pre_*.csv/.json
+    │   └── files_pre_*.csv/.json
+    │
+    ├── Reports_Post/                  # POST snapshot files
+    │   ├── services_post_*.csv/.json
+    │   ├── tasks_post_*.csv/.json
+    │   └── ... (same structure as Pre)
+    │
+    └── ChangeReport_*.txt             # Final comparison report
 ```
 
 ## ⚙️ Configuration
 
 ### InstallTracker-Config.json
 
-The configuration is automatically created and saved:
+Automatically created on first settings change save (if nothing is changed and saved the default values are used). Stores your preferences:
 
 ```json
 {
-  "TrackingPaths": {
-    "RootPaths": ["%USERPROFILE%", "%APPDATA%", "%LOCALAPPDATA%"],
-    "IncludeSubfolders": true
+  "rootPaths": [
+    "%USERPROFILE%",
+    "%APPDATA%\\Microsoft\\Windows\\Start Menu",
+    "C:\\Program Files",
+    "C:\\ProgramData",
+    "C:\\Users\\Public\\Desktop",
+    "C:\\Program Files (x86)"
+  ],
+  "scanOptions": {
+    "services": true,
+    "runKeys": true,
+    "uninstallKeys": true,
+    "startMenuShortcuts": true,
+    "scheduledTasks": true
   },
-  "Categories": {
-    "TrackServices": true,
-    "TrackTasks": true,
-    "TrackRunKeys": true,
-    "TrackUninstallKeys": true,
-    "TrackShortcuts": true,
-    "CheckVersions": true
-  }
+  "checkVersions": true,
+  "gitHubRepository": "bergerpascal/InstallTracker"
 }
 ```
 
-### Environment Variables in Paths
+### Supported Environment Variables
 
-The system supports automatic resolution of environment variables:
+The system automatically expands these environment variables:
 
-- `%USERPROFILE%` → C:\Users\Username
-- `%APPDATA%` → C:\Users\Username\AppData\Roaming
-- `%LOCALAPPDATA%` → C:\Users\Username\AppData\Local
-- `%ProgramFiles%` → C:\Program Files
-- `%ProgramFiles(x86)%` → C:\Program Files (x86)
-
-## 🔄 Comparison and Analysis
-
-After creating multiple snapshots, you can compare them:
-
-1. Snapshots from different time points available in `_Snapshots/Reports_Pre/`
-2. Open CSV or JSON files in an editor or Excel
-3. Compare entries to identify changes
-
-**Example Analysis:**
-- Search for new programs in `uninstall_*.csv`
-- Identify new services in `services_*.csv`
-- Check changes in registry keys
-
-## 🔄 Auto-Update
-
-Both scripts can automatically check GitHub for newer versions:
-
-- Version is checked at startup
-- If a newer version is available, an update is offered
-- Updates are automatically downloaded, installed, and the script is restarted
-- Prevents infinite loops using environment variables
+| Variable | Example Value |
+|----------|---------------|
+| `%USERPROFILE%` | `C:\Users\Username` |
+| `%APPDATA%` | `C:\Users\Username\AppData\Roaming` |
+| `%LOCALAPPDATA%` | `C:\Users\Username\AppData\Local` |
+| `%ProgramFiles%` | `C:\Program Files` |
+| `%ProgramFiles(x86)%` | `C:\Program Files (x86)` |
+| `%ProgramData%` | `C:\ProgramData` |
+| `%WINDIR%` | `C:\Windows` |
 
 ## 📊 Output Formats
 
 ### CSV Format
-Standard Comma-Separated-Values files, openable in:
-- Excel
-- Notepad
-- All text editors
-- Database tools
+- Comma-Separated Values
+- Compatible with Excel, databases, analysis tools
+- Easy to filter and sort
+- Human-readable
 
 ### JSON Format
-Structured data for:
-- Programmatic analysis
-- Import into databases
-- API integration
+- Structured data format
+- Ideal for programmatic analysis
+- API integration ready
 - Long-term archiving
+- Deep nesting for complex data
+
+### Text Report
+- Human-readable summary
+- Organized by change type
+- Includes counts and details
+- Ready for printing or documentation
+
+## 🔍 How It Works
+
+### PRE Snapshot Process:
+1. Scans all configured root paths
+2. Recursively reads folders and files (including hidden folders)
+3. Queries Windows Services registry
+4. Reads Scheduled Tasks
+5. Exports Run/RunOnce registry keys
+6. Exports Uninstall registry keys
+7. Captures all data to CSV and JSON files
+8. Saves with timestamp for organization
+
+### POST Snapshot Process:
+1. Repeats the scanning process
+2. Compares each category against PRE snapshot
+3. Identifies added items (not in PRE)
+4. Identifies removed items (not in POST)
+5. Generates detailed comparison report
+6. Shows summary statistics
+
+### Comparison Logic:
+- **Added**: Exists in POST but not in PRE
+- **Removed**: Exists in PRE but not in POST
+- **Unchanged**: Exists in both (not reported)
 
 ## 🛠️ Troubleshooting
 
 ### "Execution Policy" Error
+
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
 ### Administrator Rights Required
+
 ```powershell
-# Open PowerShell with Administrator rights
-powershell -NoProfile -ExecutionPolicy Bypass -File "InstallTracker.ps1"
+# Open PowerShell with Administrator rights, then:
+& "C:\path\to\InstallTracker.ps1"
 ```
 
-### Reset Old Configuration
+### AppData and Hidden Folders Not Being Scanned
+
+- The script uses `-Force` parameter to include hidden folders
+- If you still have issues, try adding explicit paths:
+  - `%USERPROFILE%\AppData\Local`
+  - `%USERPROFILE%\AppData\Roaming`
+
+### Reset Configuration
+
 ```powershell
 Remove-Item "InstallTracker-Config.json"
-# Restart script - new config will be created
+# Restart script - new config will be created with defaults
 ```
 
+### Reports Not Generating
+
+- Ensure `_Snapshots` folder is writable
+- Check Administrator rights
+- Verify sufficient disk space
+- Check antivirus isn't blocking file operations
+
+### Key Features Implemented:
+- ✅ Full GUI with modern WPF interface
+- ✅ Service, Task, Registry, and File scanning
+- ✅ Recursive folder traversal with error handling
+- ✅ Hidden folder support (AppData, System folders)
+- ✅ Before/after comparison and reporting
+- ✅ Configuration management via JSON
+- ✅ Automatic version checking and updates
+- ✅ Comprehensive status and progress reporting
+- ✅ CSV and JSON export formats
+- ✅ Error recovery and resilience
+
+## 💡 Tips & Best Practices
+
+1. **Regular Snapshots**: Take PRE snapshots regularly to establish baselines
+2. **Clear Documentation**: Always save reports for later reference
+3. **Safe Testing**: Use TestData script in controlled environments first
+4. **Backup Important Data**: Before making system changes
+5. **Run as Admin**: Always run with Administrator privileges
+6. **Review Changes**: Always review the report before taking action
+
+## 📄 License
+
+Use freely for personal and commercial purposes.
+
+---
+
+**Created with WhiteCoding** - Entirely developed using VS Code and AI Agents
+
+## 📝 Documentation History
+
 **Version:** 1.0.1  
-**Last Updated:** 2026-01-21
+**Last Updated:** January 23, 2026  
