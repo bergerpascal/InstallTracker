@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.21"
+$scriptVersion = "1.0.22"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -441,8 +441,8 @@ function Get-ChildItemWithErrorHandling {
     $currentPath = $queue.Dequeue()
     
     try {
-      # Use -ErrorAction Continue to see errors but not stop
-      $items = @(Get-ChildItem -Path $currentPath -ErrorAction Continue 2>$null)
+      # Use -Force to include hidden/system folders like AppData
+      $items = @(Get-ChildItem -Path $currentPath -Force -ErrorAction SilentlyContinue)
       
       foreach ($item in $items) {
         # Queue subdirectories for recursive processing FIRST
