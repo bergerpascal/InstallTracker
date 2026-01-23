@@ -83,26 +83,46 @@ A companion script for generating and cleaning up test data:
 
 ---
 
+### 3. InstallTracker.bat (Launcher Script)
+
+A convenient batch file to launch InstallTracker with proper permissions:
+
+#### Features:
+- **Easy Execution**: Just Double-click or Right-click and select "Run as administrator"
+- **ExecutionPolicy Bypass**: Handles PowerShell execution policy automatically
+- **Error Handling**: Checks for required files and shows helpful error messages
+- **Same Directory Detection**: Automatically finds InstallTracker.ps1 in the same folder
+
+#### Usage:
+1. Place `InstallTracker.bat` in the same folder as `InstallTracker.ps1`
+2. Double-click on `InstallTracker.bat` or right- click and Select **"Run as administrator"**
+3. InstallTracker will start
+
+---
+
 ## 🚀 Getting Started
 
 ### Requirements
 
 - Windows PowerShell 5.1 or higher
-- Optional Administrator rights (for full access to registry, services, and system folders)
 - .NET Framework 4.7.2+ (for JSON processing and WPF UI)
 - Windows 10 or later
+- Optional Administrator rights (for full access to registry, services, and system folders)
 
 ### Installation
 
-1. Download both scripts to a folder:
-   - `InstallTracker.ps1`
-   - `InstallTracker-TestData.ps1` (optional)
+1. Download all files to a folder:
+   - `InstallTracker.ps1` (main application)
+   - `InstallTracker.bat` (launcher) **← Easiest way to start**
+   - `InstallTracker-TestData.ps1` (optional - for testing)
 
-2. Right-click PowerShell and select "Run as Administrator"
+2. **Option A - Using Batch File (Recommended)**:
+   - Right-click `InstallTracker.bat` → **Run as administrator**
+   - InstallTracker will start
 
-3. Run the script:
+3. **Option B - Using PowerShell Directly**:
    ```powershell
-   & "C:\path\to\InstallTracker.ps1"
+   powershell -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\InstallTracker.ps1"
    ```
 
 ### Basic Usage
@@ -149,6 +169,20 @@ A companion script for generating and cleaning up test data:
 # Later: Clean up all test data
 & "C:\path\to\InstallTracker-TestData.ps1" -Action Delete
 ```
+
+#### Quick Start with Batch File
+
+The easiest way to start InstallTracker:
+
+1. Locate `InstallTracker.bat` in your folder
+2. Right-click on it
+3. Select **"Run as administrator"**
+4. InstallTracker starts!
+
+The batch file handles:
+- ✅ ExecutionPolicy bypass automatically
+- ✅ Error checking for required files
+- ✅ Proper exit code handling
 
 ## 📁 Directory Structure
 
