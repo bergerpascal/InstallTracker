@@ -8,7 +8,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.19"
+$scriptVersion = "1.0.20"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -643,6 +643,41 @@ function Invoke-Snapshot {
         Update-Status "Skipping Uninstall entries (disabled in settings)" -Append
       }
       
+# --- Recurse with error handling: custom function that continues on permission errors
+function Get-ChildItemWithErrorHandling {
+  param(
+    [string]$Path,
+    [scriptblock]$Filter = { $true }
+  )
+  
+  $queue = New-Object System.Collections.Queue
+  $queue.Enqueue($Path)
+  
+  while ($queue.Count -gt 0) {
+    $currentPath = $queue.Dequeue()
+    
+    try {
+      $items = @(Get-ChildItem -Path $currentPath -ErrorAction Stop)
+      
+      foreach ($item in $items) {
+        # Return the item if it passes the filter
+        if (& $Filter $item) {
+          $item
+        }
+        
+        # Queue subdirectories for recursive processing
+        if ($item.PSIsContainer) {
+          $queue.Enqueue($item.FullName)
+        }
+      }
+    } catch {
+      # Log error but continue with next directory
+      # Silently skip permission-denied folders
+      continue
+    }
+  }
+}
+
       # --- 4) Folders & 5) Shortcuts & 6) Files - Combined collection
       Update-Status "Collecting folders and files..." -Append
       $folderList = New-Object System.Collections.ArrayList
@@ -651,8 +686,11 @@ function Invoke-Snapshot {
       foreach ($root in $RootPaths) {
         Update-Status "  Processing: $root" -Append
         if (Test-Path $root) {
-          Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -notlike "*\_Snapshots*" } |
+          # Use custom function with error handling
+          Get-ChildItemWithErrorHandling -Path $root -Filter {
+            param($item)
+            $item.FullName -notlike "*\_Snapshots*"
+          } |
             ForEach-Object {
               if ($_.PSIsContainer) {
                 # Folder
@@ -677,8 +715,11 @@ function Invoke-Snapshot {
         Update-Status "Collecting shortcuts..." -Append
         $shortcutItems = foreach ($root in $RootPaths) {
           if (Test-Path $root) {
-            Get-ChildItem -Path $root -Recurse -Filter *.lnk -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -notlike "*\_Snapshots*" } |
+            # Use custom function with error handling for shortcuts
+            Get-ChildItemWithErrorHandling -Path $root -Filter {
+              param($item)
+              $item.Extension -eq ".lnk" -and $item.FullName -notlike "*\_Snapshots*"
+            } |
               Select-Object FullName
           }
         }
