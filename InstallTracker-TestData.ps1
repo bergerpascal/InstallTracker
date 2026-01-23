@@ -7,7 +7,7 @@
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 
-$scriptVersion = "1.0.10"
+$scriptVersion = "1.0.11"
 
 # --- Version Check and Update Logic ---
 $script:updateAvailable = $false
@@ -26,7 +26,7 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     $scriptPath = $MyInvocation.MyCommand.Path
     if (-not $scriptPath) { $scriptPath = $PSCommandPath }
     
-    # Simple version check - try to get latest version from GitHub
+    # Fast version check using Range Request - only download first 5KB (version is at the top)
     # Add timestamp to avoid CDN caching
     $cacheParam = [int64](Get-Date -UFormat %s)
     $uri = "https://raw.githubusercontent.com/$GitHubRepository/refs/heads/main/InstallTracker-TestData.ps1?t=$cacheParam"
@@ -35,13 +35,28 @@ if ($CheckVersions -eq $true -and $GitHubRepository -and -not $isUpdateRestart) 
     $content = $null
     
     try {
-      $webClient = New-Object System.Net.WebClient
-      $webClient.Timeout = 3000
-      $content = $webClient.DownloadString($uri)
+      # Use Range header to get only first 5KB - much faster!
+      $webRequest = [System.Net.HttpWebRequest]::Create($uri)
+      $webRequest.Timeout = 2000
+      $webRequest.AddRange(0, 5120)
+      
+      try {
+        $webResponse = $webRequest.GetResponse()
+        $stream = $webResponse.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($stream)
+        $content = $reader.ReadToEnd()
+        $reader.Close()
+        $webResponse.Close()
+      } catch {
+        # If Range not supported, fallback to regular download
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Timeout = 2000
+        $content = $webClient.DownloadString($uri)
+      }
     } catch {
       # Try with Invoke-WebRequest as fallback
       try {
-        $response = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing
+        $response = Invoke-WebRequest -Uri $uri -TimeoutSec 2 -UseBasicParsing -Headers @{Range="bytes=0-5120"}
         $content = $response.Content
       } catch {
         # Network error - skip version check
@@ -122,6 +137,7 @@ $xaml = @"
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- Title and Version -->
@@ -134,9 +150,36 @@ $xaml = @"
                 
                 <!-- Version Badge -->
                 <Border Grid.Column="1" VerticalAlignment="Center" Background="#10B981" 
-                        CornerRadius="4" Padding="12,6">
-                    <TextBlock Text="v$scriptVersion" FontSize="10" Foreground="White" FontWeight="Bold"/>
+                        CornerRadius="4" Height="36" Margin="0,0,15,0" Padding="12,0">
+                    <TextBlock Text="v$scriptVersion" FontSize="10" Foreground="White" FontWeight="Bold"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Border>
+                
+                <!-- Help Button -->
+                <Button Name="HelpButton" Grid.Column="2" Content="?" 
+                        VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,0,0"
+                        Width="36" Height="36" FontSize="16" FontWeight="Bold"
+                        Background="#3B82F6" Foreground="White" Cursor="Hand"
+                        BorderThickness="0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border CornerRadius="4" Background="{TemplateBinding Background}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#2563EB"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </Grid>
         </Border>
         
@@ -284,6 +327,7 @@ $window = [System.Windows.Markup.XamlReader]::Load($reader)
 $createBtn = $window.FindName("CreateButton")
 $deleteBtn = $window.FindName("DeleteButton")
 $exitBtn = $window.FindName("ExitButton")
+$helpBtn = $window.FindName("HelpButton")
 $statusBox = $window.FindName("StatusBox")
 $statusScrollViewer = $window.FindName("StatusScrollViewer")
 
@@ -1011,6 +1055,15 @@ $deleteBtn.Add_Click({
 
 $exitBtn.Add_Click({
   $window.Close()
+})
+
+$helpBtn.Add_Click({
+  $readmeUrl = "https://github.com/$GitHubRepository/blob/main/README.md"
+  try {
+    Start-Process $readmeUrl
+  } catch {
+    [System.Windows.MessageBox]::Show("Could not open browser to README.`n`nURL: $readmeUrl", "Help", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+  }
 })
 
 Update-Status "Ready. Click CREATE TEST DATA to generate test data for InstallTracker testing."
