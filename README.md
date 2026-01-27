@@ -2,9 +2,9 @@
 
 A PowerShell tool for tracking and analyzing system changes on Windows computers. Creates detailed snapshots of installed programs, services, tasks, registry entries, file systems, and other system components.
 
-## 🎨 Created with WhiteCoding
+## 🎨 Created with Vibe Coding
 
-This entire project was created using **WhiteCoding** - no lines of code were manually written. All development, debugging, and optimization was done using VS Code and AI Agents. This demonstrates the power of modern AI-assisted development workflows.
+This entire project was created using **Vibe Coding** - no lines of code were manually written. All development, debugging, and optimization was done using VS Code and AI Agents. This demonstrates the power of modern AI-assisted development workflows.
 
 ## 📋 Overview
 
@@ -361,7 +361,7 @@ Use freely for personal and commercial purposes.
 
 ---
 
-**Created with WhiteCoding** - Entirely developed using VS Code and AI Agents
+**Created with Vibe Coding** - Entirely developed using VS Code and AI Agents
 
 ## 📝 Documentation History
 

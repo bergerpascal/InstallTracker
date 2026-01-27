@@ -27,7 +27,7 @@
   - Windows 10 or later
   - Administrator rights recommended for full system coverage
   
-  Created with WhiteCoding - AI-assisted development for VS Code
+  Created with Vibe Coding - AI-assisted development for VS Code
 #>
 
 # Script version
