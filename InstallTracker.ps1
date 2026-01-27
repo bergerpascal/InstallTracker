@@ -31,7 +31,7 @@
 #>
 
 # Script version
-$scriptVersion = "1.0.24"
+$scriptVersion = "1.0.25"
 
 # Determine script directory - works even when sourced
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
