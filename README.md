@@ -37,7 +37,7 @@ The primary script with a modern graphical user interface for system change trac
   
 - **Detailed Change Reports**: 
   - Automatic before/after comparison
-  - Formatted text reports with all changes listed
+  - Formatted HTML reports with all changes listed
   - Separate counts for added/removed items by category
   - Timestamp-based file organization
   
@@ -207,7 +207,7 @@ InstallTracker/
     │   ├── tasks_post_*.csv/.json
     │   └── ... (same structure as Pre)
     │
-    └── ChangeReport_*.txt             # Final comparison report
+    └── ChangeReport_*.html            # Final comparison report
 ```
 
 ## ⚙️ Configuration
@@ -267,8 +267,8 @@ The system automatically expands these environment variables:
 - Long-term archiving
 - Deep nesting for complex data
 
-### Text Report
-- Human-readable summary
+### HTML Report
+- Human-readable summary in browser format
 - Organized by change type
 - Includes counts and details
 - Ready for printing or documentation

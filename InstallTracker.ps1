@@ -760,10 +760,16 @@ function Invoke-Snapshot {
             ForEach-Object {
               if ($_.PSIsContainer) {
                 # Folder
-                [void]$folderList.Add([PSCustomObject]@{FullName = $_.FullName})
+                [void]$folderList.Add([PSCustomObject]@{
+                  FullName = $_.FullName
+                  CreationTime = $_.CreationTime
+                })
               } elseif ($_.Extension -ne ".lnk") {
                 # File (not .lnk)
-                [void]$fileList.Add([PSCustomObject]@{FullName = $_.FullName})
+                [void]$fileList.Add([PSCustomObject]@{
+                  FullName = $_.FullName
+                  CreationTime = $_.CreationTime
+                })
               }
             }
         } else {
@@ -786,7 +792,7 @@ function Invoke-Snapshot {
               param($item)
               $item.Extension -eq ".lnk" -and $item.FullName -notlike "*\_Snapshots*"
             } |
-              Select-Object FullName
+              Select-Object FullName, CreationTime
           }
         }
         Export-JsonCsv -BaseName 'shortcuts' -Data $shortcutItems -Stage $stage -TimeStamp $ts -SnapshotDir $ssDir
@@ -841,8 +847,9 @@ function Invoke-Snapshot {
       function ConvertTo-HtmlTable {
         param([object[]]$Rows, [string[]]$Columns, [string]$RowClass = '')
         if (-not $Rows -or $Rows.Count -eq 0) { return '<p class="empty">No entries.</p>' }
+        $tableClass = if ($Columns -contains 'State') { ' class="has-state"' } else { '' }
         $sb = [System.Text.StringBuilder]::new()
-        [void]$sb.Append('<table><thead><tr>')
+        [void]$sb.Append("<table$tableClass><thead><tr>")
         foreach ($col in $Columns) { [void]$sb.Append("<th>$(ConvertTo-HtmlEscape $col)</th>") }
         [void]$sb.Append('</tr></thead><tbody>')
         foreach ($row in $Rows) {
@@ -890,13 +897,13 @@ function Invoke-Snapshot {
 
       # Build summary rows
       $summaryRows = @(
-        [PSCustomObject]@{Section='Services';         Added=$svcDiff.Added.Count;       Removed=$svcDiff.Removed.Count}
-        [PSCustomObject]@{Section='Scheduled Tasks';  Added=$tskDiff.Added.Count;       Removed=$tskDiff.Removed.Count}
-        [PSCustomObject]@{Section='Run/RunOnce Keys'; Added=$runDiff.Added.Count;       Removed=$runDiff.Removed.Count}
-        [PSCustomObject]@{Section='Installed Apps';   Added=$uninstallDiff.Added.Count; Removed=$uninstallDiff.Removed.Count}
-        [PSCustomObject]@{Section='Folders';          Added=$fldDiff.Added.Count;       Removed=$fldDiff.Removed.Count}
-        [PSCustomObject]@{Section='Shortcuts';        Added=$lnkDiff.Added.Count;       Removed=$lnkDiff.Removed.Count}
-        [PSCustomObject]@{Section='Files';            Added=$filDiff.Added.Count;       Removed=$filDiff.Removed.Count}
+        [PSCustomObject]@{Section='Services';         Added=$svcDiff.Added.Count;       Removed=$svcDiff.Removed.Count;       AddId='sec-svc-add'; RemId='sec-svc-rem'}
+        [PSCustomObject]@{Section='Scheduled Tasks';  Added=$tskDiff.Added.Count;       Removed=$tskDiff.Removed.Count;       AddId='sec-tsk-add'; RemId='sec-tsk-rem'}
+        [PSCustomObject]@{Section='Run/RunOnce Keys'; Added=$runDiff.Added.Count;       Removed=$runDiff.Removed.Count;       AddId='sec-run-add'; RemId='sec-run-rem'}
+        [PSCustomObject]@{Section='Installed Apps';   Added=$uninstallDiff.Added.Count; Removed=$uninstallDiff.Removed.Count; AddId='sec-uni-add'; RemId='sec-uni-rem'}
+        [PSCustomObject]@{Section='Folders';          Added=$fldDiff.Added.Count;       Removed=$fldDiff.Removed.Count;       AddId='sec-fld-add'; RemId=''}
+        [PSCustomObject]@{Section='Shortcuts';        Added=$lnkDiff.Added.Count;       Removed=$lnkDiff.Removed.Count;       AddId='sec-lnk-add'; RemId=''}
+        [PSCustomObject]@{Section='Files';            Added=$filDiff.Added.Count;       Removed=$filDiff.Removed.Count;       AddId='sec-fil-add'; RemId=''}
       )
       $summaryHtml = [System.Text.StringBuilder]::new()
       [void]$summaryHtml.Append('<div class="summary-cards">')
@@ -904,7 +911,9 @@ function Invoke-Snapshot {
         $addCls = if ($row.Added   -gt 0) { ' add' } else { '' }
         $remCls = if ($row.Removed -gt 0) { ' rem' } else { '' }
         $hasCls = if ($row.Added -gt 0 -or $row.Removed -gt 0) { ' changed' } else { '' }
-        [void]$summaryHtml.Append("<div class='sc$hasCls'><span class='sc-name'>$(ConvertTo-HtmlEscape $row.Section)</span><span class='sc-num add$addCls'>+$($row.Added)</span><span class='sc-num rem$remCls'>-$($row.Removed)</span></div>")
+        $targetId = if ($row.Added -gt 0 -or -not $row.RemId) { $row.AddId } else { $row.RemId }
+        $openIds = if ($row.RemId) { "$($row.AddId),$($row.RemId)" } else { "$($row.AddId)" }
+        [void]$summaryHtml.Append("<a class='sc$hasCls' href='#$targetId' data-open='$(ConvertTo-HtmlEscape $openIds)'><span class='sc-name'>$(ConvertTo-HtmlEscape $row.Section)</span><span class='sc-num add$addCls'>+$($row.Added)</span><span class='sc-num rem$remCls'>-$($row.Removed)</span></a>")
       }
       [void]$summaryHtml.Append('</div>')
 
@@ -937,7 +946,7 @@ function Invoke-Snapshot {
         -Content (ConvertTo-HtmlTable -Rows ($lnkDiff.Added | Sort-Object FullName) -Columns @('FullName','CreationTime') -RowClass 'add')
 
       $sectionsHtml += New-HtmlSection -Id 'fil-add' -Title 'New Files' -Count $filDiff.Added.Count -BadgeClass 'add' `
-        -Content (ConvertTo-HtmlTable -Rows ($filDiff.Added | Sort-Object FullName) -Columns @('FullName','CreationTime','Length') -RowClass 'add')
+        -Content (ConvertTo-HtmlTable -Rows ($filDiff.Added | Sort-Object FullName) -Columns @('FullName','CreationTime') -RowClass 'add')
 
       # Assemble full HTML document
       $htmlDoc = @"
@@ -949,32 +958,34 @@ function Invoke-Snapshot {
 <title>InstallTracker - Change Report</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
   body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#F3F4F6;color:#1F2937}
   header{background:#1F2937;color:#fff;padding:20px 28px 16px}
   header h1{font-size:20px;font-weight:700;margin-bottom:4px}
   header p{font-size:11px;color:#9CA3AF}
-  .toolbar{display:flex;align-items:center;gap:10px;padding:14px 28px;background:#fff;border-bottom:1px solid #E5E7EB}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:14px 28px;background:#fff;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:30}
   .toolbar button{padding:6px 14px;border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB;
     color:#374151;cursor:pointer;font-size:12px;font-weight:500}
   .toolbar button:hover{background:#E5E7EB}
   .container{max-width:1400px;margin:24px auto;padding:0 24px}
   /* Summary */
-  .summary-card{background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:14px 20px;margin-bottom:24px}
+  .summary-card{background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:14px 20px;margin-bottom:24px;position:sticky;top:66px;z-index:20;box-shadow:0 8px 20px rgba(0,0,0,.05)}
   .summary-card h2{font-size:12px;font-weight:600;margin-bottom:10px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em}
   .summary-cards{display:flex;flex-wrap:wrap;gap:8px}
-  .sc{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid #E5E7EB;border-radius:6px;background:#F9FAFB;white-space:nowrap}
+  .sc{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid #E5E7EB;border-radius:6px;background:#F9FAFB;white-space:nowrap;text-decoration:none;transition:background .15s,border-color .15s,transform .15s}
+  .sc:hover{background:#fff;border-color:#9CA3AF;transform:translateY(-1px)}
   .sc.changed{border-color:#D1D5DB;background:#fff}
   .sc-name{font-size:12px;font-weight:600;color:#374151;margin-right:4px}
   .sc-num{font-size:12px;font-weight:700;color:#9CA3AF}
   .sc-num.add{color:#059669}
   .sc-num.rem{color:#DC2626}
   /* Sections */
-  details{background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:12px;overflow:hidden}
+  details{background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:12px;overflow:hidden;scroll-margin-top:230px}
   details[open] summary{border-bottom:1px solid #E5E7EB}
   summary{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;
     cursor:pointer;list-style:none;user-select:none;font-weight:600;font-size:13px;color:#1F2937}
   summary::-webkit-details-marker{display:none}
-  summary::before{content:'▶';font-size:10px;margin-right:10px;transition:transform .2s;color:#9CA3AF}
+  summary::before{content:'';width:0;height:0;margin-right:10px;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:7px solid #9CA3AF;transition:transform .2s}
   details[open] summary::before{transform:rotate(90deg)}
   .sec-title{flex:1}
   .badge{display:inline-block;min-width:28px;text-align:center;padding:2px 8px;border-radius:12px;
@@ -987,6 +998,7 @@ function Invoke-Snapshot {
   table th{background:#F9FAFB;color:#6B7280;font-weight:600;text-align:left;
     padding:7px 10px;border-bottom:1px solid #E5E7EB;white-space:nowrap}
   table td{padding:6px 10px;border-bottom:1px solid #F3F4F6;word-break:break-all}
+  table.has-state th:nth-child(4),table.has-state td:nth-child(4){min-width:85px;white-space:nowrap}
   table tr:last-child td{border-bottom:none}
   tr.add td:first-child{border-left:3px solid #10B981}
   tr.rem td:first-child{border-left:3px solid #EF4444}
@@ -1009,6 +1021,17 @@ function Invoke-Snapshot {
   </div>
   $sectionsHtml
 </div>
+<script>
+  document.querySelectorAll('.summary-card .sc').forEach(card => {
+    card.addEventListener('click', () => {
+      const openIds = (card.dataset.open || '').split(',').filter(Boolean);
+      openIds.forEach(id => {
+        const section = document.getElementById(id);
+        if (section) section.open = true;
+      });
+    });
+  });
+</script>
 </body>
 </html>
 "@
